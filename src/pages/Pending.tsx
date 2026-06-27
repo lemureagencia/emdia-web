@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, CheckCircle, Pencil, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, AlertTriangle, X } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Pencil, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, AlertTriangle } from 'lucide-react';
 import { format, parseISO, endOfMonth } from 'date-fns';
 import { clsx } from 'clsx';
 import { supabase } from '../lib/supabase';
@@ -91,28 +91,6 @@ export const Pending = () => {
     if (data) setDescriptions(data);
   };
 
-  const handleCreateDescription = async (text: string) => {
-    if (!user || !text.trim()) return;
-    const trimmed = text.trim();
-    if (descriptions.some((d) => d.text.toLowerCase() === trimmed.toLowerCase())) return;
-    const { data, error } = await supabase
-      .from('descriptions')
-      .insert({ user_id: user.id, text: trimmed })
-      .select('id, text')
-      .single();
-    if (!error && data) {
-      setDescriptions([...descriptions, data]);
-    }
-  };
-
-  const handleDeleteDescription = async (id: string) => {
-    if (!user) return;
-    const { error } = await supabase.from('descriptions').delete().eq('id', id);
-    if (!error) {
-      setDescriptions(descriptions.filter((d) => d.id !== id));
-    }
-  };
-
   useEffect(() => {
     fetchPending();
     fetchDescriptions();
@@ -153,11 +131,6 @@ export const Pending = () => {
     e.preventDefault();
     if (!user) return;
     setIsSubmitting(true);
-
-    // Auto-save new description if it's not already in the list
-    if (formData.description.trim() && !descriptions.some((d) => d.text.toLowerCase() === formData.description.trim().toLowerCase())) {
-      await handleCreateDescription(formData.description);
-    }
 
     const total = parseFloat(formData.amount);
     const method = formData.payment_method;
@@ -544,44 +517,6 @@ export const Pending = () => {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />
             </div>
-            {formData.description && !descriptions.some((d) => d.text === formData.description) && (
-              <div className="flex gap-2 mt-1">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => handleCreateDescription(formData.description)}
-                  disabled={!formData.description.trim() || descriptions.some((d) => d.text.toLowerCase() === formData.description.trim().toLowerCase())}
-                >
-                  Salvar como descrição padrão
-                </Button>
-              </div>
-            )}
-            {descriptions.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {descriptions.map((d) => (
-                  <span key={d.id} style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-background)',
-                    fontSize: '0.75rem',
-                  }}>
-                    {d.text}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteDescription(d.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--color-text-muted)' }}
-                      title="Remover descrição padrão"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex gap-4">
