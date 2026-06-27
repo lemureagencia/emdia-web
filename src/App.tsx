@@ -8,6 +8,7 @@ import { Transactions } from './pages/Transactions';
 import { Pending } from './pages/Pending';
 import { Goals } from './pages/Goals';
 import { Agent } from './pages/Agent';
+import { Catalog } from './pages/Catalog';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
             <Route path="pending" element={<Pending />} />
             <Route path="goals" element={<Goals />} />
             <Route path="agent" element={<Agent />} />
+            <Route path="catalog" element={<Catalog />} />
             <Route path="reports" element={<div className="p-6">Página de Relatórios (Em breve)</div>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
