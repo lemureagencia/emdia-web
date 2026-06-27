@@ -480,6 +480,13 @@ export const Pending = () => {
             </div>
           )}
 
+          <Input
+            label="Nome do cliente (opcional)"
+            placeholder="Ex: Juliana Chieepe"
+            value={formData.category}
+            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+          />
+
           <div>
             <label className="form-label">Descrição</label>
             <div className="flex gap-2 mt-1">
@@ -542,13 +549,6 @@ export const Pending = () => {
               />
             </div>
           </div>
-
-          <Input
-            label="Nome do cliente (opcional)"
-            placeholder="Ex: Juliana Chieepe"
-            value={formData.category}
-            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-          />
 
           <div className="flex justify-end gap-2 mt-4">
             <Button type="button" variant="ghost" onClick={closeModal}>Cancelar</Button>
