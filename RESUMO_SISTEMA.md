@@ -3,7 +3,7 @@
 Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
 Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 
-> Última atualização: 27/06/2026 (23h).
+> Última atualização: 27/06/2026 (sessão 2).
 
 ---
 
@@ -74,8 +74,9 @@ mesma tabela `transactions`, diferenciado pela coluna **`status`**:
 - **Pendências**: itens em aberto (a receber / a pagar / vencidos), com **filtro** de abas:
   **Todos · A receber (clientes) · A pagar (contas) · Vencidos**. Marcar como pago ✓, **Editar** ✏️,
   Excluir. Suporta **parcelamento** (gera N parcelas mês a mês).
-  - **Tipo de serviço/produto** (opcional): dropdown com serviços cadastrados + criação inline de novos serviços (tabela `services`).
-  - **Descrições padrão**: dropdown com descrições salvas + texto livre. Ao criar pendência com descrição nova, ela é salva automaticamente como padrão (tabela `descriptions`).
+  - Formulário com ordem: **Nome do cliente → Descrição → Valor + Data de Vencimento**.
+  - **Descrição**: dropdown com itens do Catálogo + campo de texto livre. Sem auto-save e sem exclusão aqui — gerenciamento exclusivo na página Catálogo.
+- **Catálogo**: página dedicada (`/catalog`) para gerenciar **descrições padrão** (produtos, serviços, tipos de pendência). CRUD completo: adicionar, editar inline (Enter salva / Esc cancela), excluir. Alimenta o dropdown de Descrição em Pendências e o agente do WhatsApp.
 - **Metas**: progresso (quanto falta / quanto chegou / %). Tem **Editar** ✏️.
 - **Conectar Agente**: o cliente cadastra o **número de WhatsApp** dele (é assim que o agente o identifica).
 
@@ -97,7 +98,7 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
   parcelas (`installments`, `installment_number`, `installment_group`), `goal_id`.
 - **goals**: `title`, `target_amount`, `current_amount`, `deadline`.
 - **services**: `user_id`, `name` — categorias de serviço/produto criadas pelo usuário (usado no campo `service_type`).
-- **descriptions**: `user_id`, `text` — descrições padrão para pendências (aparecem no dropdown ao criar pendência).
+- **descriptions**: `user_id`, `text` — catálogo de descrições padrão do usuário (gerenciado pela página Catálogo; aparece no dropdown de Pendências e é consultado pelo agente).
 - **agent_messages**: memória curta da conversa do agente (`phone_norm`, `role`, `content`, `created_at`).
 
 ### Funções (RPC) usadas pelo agente (executadas só com a service_role)
@@ -106,6 +107,7 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - `get_financial_summary(user_id)` → inclui `received_month` e `paid_month` (entradas/saídas **já realizadas no mês**).
 - `get_pending_items(user_id)` → retorna pendências com `service_type`.
 - `agent_register_by_phone(...)` → registra transação (aceita `p_category` = Nome do cliente, `p_service_type` = tipo de serviço); se **paga**, ajusta o Saldo na Conta.
+- `get_descriptions_by_phone(phone)` → retorna catálogo de descrições do usuário pelo telefone (usado pelo agente para matching).
 - `agent_set_balance_by_phone(phone, valor)` → define o saldo.
 - `agent_log_message(phone, role, content)` / `agent_recent_messages(phone, limit)` → memória da conversa.
 - `canon_phone(p)` → normaliza telefone BR (casa número **com ou sem** o 9).
@@ -113,7 +115,8 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 ### Scripts SQL (na raiz do projeto)
 `schema.sql`, `agent_setup.sql`, `agent_actions.sql`, `canon_phone.sql`, `fix_summary_month.sql`,
 `entradas_mes.sql` (received_month/paid_month), `agent_memory.sql` (tabela + RPCs de memória),
-`services_setup.sql` (tabela services + RLS), `descriptions_setup.sql` (tabela descriptions + RLS).
+`services_setup.sql` (tabela services + RLS), `descriptions_setup.sql` (tabela descriptions + RLS),
+`catalog_setup.sql` (UPDATE policy em descriptions + RPC `get_descriptions_by_phone`).
 
 ---
 
@@ -137,6 +140,7 @@ Cliente manda no WhatsApp
 - **IA**: **Groq** (`llama-3.3-70b-versatile`).
 - **Arquivos**: `main.py` (webhook), `zernio.py` (envio/recebimento), `handler.py` (lógica/respostas),
   `llm.py` (interpretação + modo inteligente), `emdia.py` (RPC Supabase), `config.py`, `installments.py`.
+- **`_fix_spacing()`** em `handler.py`: pós-processamento que colapsa 2+ linhas em branco para exatamente 1 em todas as respostas.
 - **Hospedagem**: **VPS via Easypanel** (Docker).
   - URL: `https://evolution-emdia-agent.iyrj6w.easypanel.host`
   - Repositório: `github.com/lemureagencia/emdia-agent` (branch `main`)
@@ -154,6 +158,8 @@ Cliente manda no WhatsApp
 - **Distingue conceitos**: "entradas/recebi" (já entrou) ≠ "a receber/esperada" (pendente). Rótulos com o nome
   do mês (ex.: "junho").
 - **Service type**: o snapshot financeiro inclui `[serviço: X]` para itens com `service_type`, permitindo perguntas como "quantos clientes do tráfego estão devendo?"
+- **Catálogo de descrições**: o agente busca as descrições padrão do cliente (`get_descriptions_by_phone`) e as inclui no prompt do LLM. Se a descrição da mensagem corresponder a uma cadastrada, o LLM usa o texto exato.
+- **Formatação das listagens**: respostas de lista (clientes/contas) seguem formato fixo — nome em *negrito*, sub-linhas com Serviço / Valor / Data, 1 linha em branco entre itens. Espaçamento garantido por código (`_fix_spacing`), não pelo LLM.
 
 ### Exemplos que o agente entende
 - Registrar: *"paguei 150 de luz no pix"*, *"recebi 2000 da Maria de consultoria"*,
@@ -222,14 +228,34 @@ Cliente manda no WhatsApp
 
 ---
 
-## 10. Histórico de mudanças recentes (27/06/2026)
+## 10. Histórico de mudanças recentes
 
-### Funcionalidades novas
+### Sessão 2 — 27/06/2026
+
+#### Funcionalidades novas
+- **Catálogo de Descrições** (`/catalog`): nova página no menu lateral para gerenciar descrições padrão (produtos, serviços, tipos de pendência). CRUD completo com edição inline.
+- **Agente reconhece catálogo**: ao receber mensagem no WhatsApp, o agente busca as descrições cadastradas e usa o texto exato quando há correspondência.
+- **Listagem formatada no WhatsApp**: clientes/contas listados com nome em negrito, serviço, valor e data em linhas separadas; exatamente 1 linha em branco entre itens (garantido por `_fix_spacing` no código).
+- **Data de vencimento nas listagens**: agente sempre informa "📅 Vence em" ou "⚠️ Vencido em" para cada item listado.
+
+#### Ajustes no formulário de Pendências
+- **Campo "Tipo de serviço/produto" removido** do formulário (gerenciamento centralizado no Catálogo).
+- **Bloco de descrição simplificado**: apenas dropdown do catálogo + campo livre. Removidos tags com exclusão e auto-save.
+- **Nova ordem dos campos**: Nome do cliente → Descrição → Valor + Data de Vencimento.
+
+#### Banco (SQL rodado no Supabase)
+- `catalog_setup.sql`: política `UPDATE` em `descriptions` + RPC `get_descriptions_by_phone`.
+
+---
+
+### Sessão 1 — 27/06/2026
+
+#### Funcionalidades novas
 - **Edição em todas as abas**: Metas, Transações e Pendências agora têm botão ✏️ para editar registros.
-- **Campo "Tipo de serviço/produto"**: dropdown em Transações e Pendências com serviços criados pelo usuário (tabela `services`). Criação inline de novos serviços.
-- **Descrições padrão em Pendências**: dropdown com descrições salvas + texto livre. Descrições novas são salvas automaticamente como padrão (tabela `descriptions`).
+- **Campo "Tipo de serviço/produto"**: dropdown em Transações com serviços criados pelo usuário (tabela `services`).
+- **Descrições padrão em Pendências**: dropdown com descrições salvas + texto livre (tabela `descriptions`).
 
-### Infraestrutura
+#### Infraestrutura
 - **Migração Netlify → Vercel**: deploy automático a cada push no GitHub (`lemureagencia/emdia-web`).
 - **GitHub**: repo web público, repo agent privado (`lemureagencia/emdia-agent`).
 - **Banco**: criadas tabelas `services` e `descriptions` com RLS.
@@ -244,5 +270,4 @@ Cliente manda no WhatsApp
 - Gráficos do Painel com dados reais por mês.
 - Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
 - **Rotacionar as chaves** desta seção (boa prática de segurança).
-- Deploy do agente com mudanças de `service_type` no GitHub `emdia-agent` + Easypanel.
 - Atualizar `agent_setup.sql` e `agent_actions.sql` no repo do agent com as novas colunas.
