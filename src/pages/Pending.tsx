@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, CheckCircle, Pencil, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Pencil, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, AlertTriangle, X } from 'lucide-react';
 import { format, parseISO, endOfMonth } from 'date-fns';
 import { clsx } from 'clsx';
 import { supabase } from '../lib/supabase';
@@ -30,6 +30,11 @@ interface Service {
   name: string;
 }
 
+interface Description {
+  id: string;
+  text: string;
+}
+
 // Linha exibida: item solto OU grupo de parcelas (mostra só a próxima a vencer)
 interface DisplayRow {
   key: string;
@@ -56,6 +61,7 @@ export const Pending = () => {
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'overdue'>('all');
   const [services, setServices] = useState<Service[]>([]);
   const [newServiceName, setNewServiceName] = useState('');
+  const [descriptions, setDescriptions] = useState<Description[]>([]);
   const [formData, setFormData] = useState({
     type: 'income' as 'income' | 'expense',
     amount: '',
@@ -92,6 +98,16 @@ export const Pending = () => {
     if (data) setServices(data);
   };
 
+  const fetchDescriptions = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('descriptions')
+      .select('id, text')
+      .eq('user_id', user.id)
+      .order('text', { ascending: true });
+    if (data) setDescriptions(data);
+  };
+
   const handleCreateService = async () => {
     if (!user || !newServiceName.trim()) return;
     const { data, error } = await supabase
@@ -106,9 +122,32 @@ export const Pending = () => {
     }
   };
 
+  const handleCreateDescription = async (text: string) => {
+    if (!user || !text.trim()) return;
+    const trimmed = text.trim();
+    if (descriptions.some((d) => d.text.toLowerCase() === trimmed.toLowerCase())) return;
+    const { data, error } = await supabase
+      .from('descriptions')
+      .insert({ user_id: user.id, text: trimmed })
+      .select('id, text')
+      .single();
+    if (!error && data) {
+      setDescriptions([...descriptions, data]);
+    }
+  };
+
+  const handleDeleteDescription = async (id: string) => {
+    if (!user) return;
+    const { error } = await supabase.from('descriptions').delete().eq('id', id);
+    if (!error) {
+      setDescriptions(descriptions.filter((d) => d.id !== id));
+    }
+  };
+
   useEffect(() => {
     fetchPending();
     fetchServices();
+    fetchDescriptions();
   }, [user]);
 
   const resetForm = () => {
@@ -147,6 +186,11 @@ export const Pending = () => {
     e.preventDefault();
     if (!user) return;
     setIsSubmitting(true);
+
+    // Auto-save new description if it's not already in the list
+    if (formData.description.trim() && !descriptions.some((d) => d.text.toLowerCase() === formData.description.trim().toLowerCase())) {
+      await handleCreateDescription(formData.description);
+    }
 
     const total = parseFloat(formData.amount);
     const method = formData.payment_method;
@@ -496,13 +540,82 @@ export const Pending = () => {
             </div>
           )}
 
-          <Input
-            label="Descrição"
-            placeholder="Ex: Serviço de vídeos, Conta de luz"
-            required
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          />
+          <div>
+            <label className="form-label">Descrição</label>
+            <div className="flex gap-2 mt-1">
+              <select
+                value={descriptions.some((d) => d.text === formData.description) ? formData.description : '__custom__'}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setFormData({ ...formData, description: '' });
+                  } else {
+                    setFormData({ ...formData, description: e.target.value });
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: 'var(--spacing-2) var(--spacing-3)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-background)',
+                  color: 'var(--color-text)',
+                  fontFamily: 'inherit',
+                  fontSize: '0.875rem',
+                }}
+              >
+                <option value="__custom__">Digite uma nova descrição...</option>
+                {descriptions.map((d) => (
+                  <option key={d.id} value={d.text}>{d.text}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 mt-1">
+              <Input
+                placeholder="Descrição da pendência"
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </div>
+            {formData.description && !descriptions.some((d) => d.text === formData.description) && (
+              <div className="flex gap-2 mt-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handleCreateDescription(formData.description)}
+                  disabled={!formData.description.trim() || descriptions.some((d) => d.text.toLowerCase() === formData.description.trim().toLowerCase())}
+                >
+                  Salvar como descrição padrão
+                </Button>
+              </div>
+            )}
+            {descriptions.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {descriptions.map((d) => (
+                  <span key={d.id} style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-background)',
+                    fontSize: '0.75rem',
+                  }}>
+                    {d.text}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDescription(d.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--color-text-muted)' }}
+                      title="Remover descrição padrão"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div>
             <label className="form-label">Tipo de serviço/produto (opcional)</label>
