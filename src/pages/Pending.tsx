@@ -25,11 +25,6 @@ interface PendingTx {
   installment_number: number | null;
 }
 
-interface Service {
-  id: string;
-  name: string;
-}
-
 interface Description {
   id: string;
   text: string;
@@ -59,8 +54,6 @@ export const Pending = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'overdue'>('all');
-  const [services, setServices] = useState<Service[]>([]);
-  const [newServiceName, setNewServiceName] = useState('');
   const [descriptions, setDescriptions] = useState<Description[]>([]);
   const [formData, setFormData] = useState({
     type: 'income' as 'income' | 'expense',
@@ -88,16 +81,6 @@ export const Pending = () => {
     setIsLoading(false);
   };
 
-  const fetchServices = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('services')
-      .select('id, name')
-      .eq('user_id', user.id)
-      .order('name', { ascending: true });
-    if (data) setServices(data);
-  };
-
   const fetchDescriptions = async () => {
     if (!user) return;
     const { data } = await supabase
@@ -106,20 +89,6 @@ export const Pending = () => {
       .eq('user_id', user.id)
       .order('text', { ascending: true });
     if (data) setDescriptions(data);
-  };
-
-  const handleCreateService = async () => {
-    if (!user || !newServiceName.trim()) return;
-    const { data, error } = await supabase
-      .from('services')
-      .insert({ user_id: user.id, name: newServiceName.trim() })
-      .select('id, name')
-      .single();
-    if (!error && data) {
-      setServices([...services, data]);
-      setFormData({ ...formData, service_type: data.name });
-      setNewServiceName('');
-    }
   };
 
   const handleCreateDescription = async (text: string) => {
@@ -146,14 +115,12 @@ export const Pending = () => {
 
   useEffect(() => {
     fetchPending();
-    fetchServices();
     fetchDescriptions();
   }, [user]);
 
   const resetForm = () => {
     setEditingId(null);
     setFormData({ type: 'income', amount: '', description: '', category: '', service_type: '', due_date: todayStr(), payment_method: 'pix', parcelado: false, installments: '2' });
-    setNewServiceName('');
   };
 
   const closeModal = () => {
@@ -614,45 +581,6 @@ export const Pending = () => {
                   </span>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div>
-            <label className="form-label">Tipo de serviço/produto (opcional)</label>
-            <div className="flex gap-2 mt-1">
-              <select
-                value={formData.service_type}
-                onChange={(e) => setFormData({ ...formData, service_type: e.target.value })}
-                style={{
-                  flex: 1,
-                  padding: 'var(--spacing-2) var(--spacing-3)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-background)',
-                  color: 'var(--color-text)',
-                  fontFamily: 'inherit',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <option value="">Nenhum</option>
-                {services.map((s) => (
-                  <option key={s.id} value={s.name}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2 mt-1">
-              <Input
-                placeholder="Criar novo serviço..."
-                value={newServiceName}
-                onChange={(e) => setNewServiceName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateService(); } }}
-              />
-              <Button type="button" variant="secondary" onClick={handleCreateService} disabled={!newServiceName.trim()}>
-                Criar
-              </Button>
-            </div>
-            {formData.service_type && (
-              <div className="text-xs text-muted mt-1">Serviço selecionado: <strong>{formData.service_type}</strong></div>
             )}
           </div>
 
