@@ -3,7 +3,7 @@
 Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
 Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 
-> Última atualização: 27/06/2026.
+> Última atualização: 27/06/2026 (23h).
 
 ---
 
@@ -13,7 +13,7 @@ Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
 │  App Web (EmDia)│────▶│   Supabase (banco)   │◀────│  Agente WhatsApp     │
 │ React+Vite      │     │  Postgres + RLS      │     │  Python/FastAPI      │
-│ Netlify         │     │  + funções RPC       │     │  (VPS/Easypanel)     │
+│ Vercel          │     │  + funções RPC       │     │  (VPS/Easypanel)     │
 └─────────────────┘     └──────────────────────┘     └──────────┬──────────┘
                                                                  │
                                           Zernio (WhatsApp oficial, coexistência)
@@ -55,7 +55,8 @@ mesma tabela `transactions`, diferenciado pela coluna **`status`**:
 ## 3. App Web (Front-end)
 
 - **Stack**: React + Vite + TypeScript, CSS puro (design system próprio), Recharts, Lucide Icons.
-- **Hospedagem**: **Netlify** → https://emdia-financas.netlify.app
+- **Hospedagem**: **Vercel** → https://emdia-web.vercel.app (deploy automático a cada push no `main`).
+- **GitHub**: `github.com/lemureagencia/emdia-web` (público).
 - **Auth**: Supabase Auth (e-mail/senha), com auto-confirmação ligada.
 - **Idioma**: Português (BR). Datas/moeda em pt-BR (R$).
 
@@ -69,10 +70,13 @@ mesma tabela `transactions`, diferenciado pela coluna **`status`**:
 - **Transações**: lista **apenas concluídos** (`status='paid'`). Cria movimentação já paga/recebida
   (tipo Entrada/Saída, forma de pagamento, data, valor, Nome do cliente, destinar a meta).
   Colunas: **Nome** · **Descrição** · Data · Tipo · Situação · Forma · Valor. Tem **Editar** ✏️ e Excluir.
+  - **Tipo de serviço/produto** (opcional): dropdown com serviços cadastrados + criação inline.
 - **Pendências**: itens em aberto (a receber / a pagar / vencidos), com **filtro** de abas:
   **Todos · A receber (clientes) · A pagar (contas) · Vencidos**. Marcar como pago ✓, **Editar** ✏️,
   Excluir. Suporta **parcelamento** (gera N parcelas mês a mês).
-- **Metas**: progresso (quanto falta / quanto chegou / %).
+  - **Tipo de serviço/produto** (opcional): dropdown com serviços cadastrados + criação inline de novos serviços (tabela `services`).
+  - **Descrições padrão**: dropdown com descrições salvas + texto livre. Ao criar pendência com descrição nova, ela é salva automaticamente como padrão (tabela `descriptions`).
+- **Metas**: progresso (quanto falta / quanto chegou / %). Tem **Editar** ✏️.
 - **Conectar Agente**: o cliente cadastra o **número de WhatsApp** dele (é assim que o agente o identifica).
 
 ### Saldo em conta (manual)
@@ -89,24 +93,27 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 ### Tabelas
 - **profiles**: `id`, `full_name`, `phone` (WhatsApp), `current_balance` (saldo manual).
 - **transactions**: `type` (income/expense), `status` (paid/pending), `amount`, `description` (= Descrição),
-  `category` (= **Nome** do cliente), `due_date`, `paid_date`, `payment_method` (pix/card/cash),
+  `category` (= **Nome** do cliente), `service_type` (tipo de serviço/produto, opcional), `due_date`, `paid_date`, `payment_method` (pix/card/cash),
   parcelas (`installments`, `installment_number`, `installment_group`), `goal_id`.
 - **goals**: `title`, `target_amount`, `current_amount`, `deadline`.
+- **services**: `user_id`, `name` — categorias de serviço/produto criadas pelo usuário (usado no campo `service_type`).
+- **descriptions**: `user_id`, `text` — descrições padrão para pendências (aparecem no dropdown ao criar pendência).
 - **agent_messages**: memória curta da conversa do agente (`phone_norm`, `role`, `content`, `created_at`).
 
 ### Funções (RPC) usadas pelo agente (executadas só com a service_role)
 - `get_summary_by_phone(phone)` → resumo completo: saldo, recebido/pago do mês, a receber/pagar (do mês),
   vencidos, lista de pendências (com `category`/Nome) e metas.
 - `get_financial_summary(user_id)` → inclui `received_month` e `paid_month` (entradas/saídas **já realizadas no mês**).
-- `get_pending_items(user_id)` / `get_goals_summary(user_id)`.
-- `agent_register_by_phone(...)` → registra transação (aceita `p_category` = Nome do cliente); se **paga**, ajusta o Saldo na Conta.
+- `get_pending_items(user_id)` → retorna pendências com `service_type`.
+- `agent_register_by_phone(...)` → registra transação (aceita `p_category` = Nome do cliente, `p_service_type` = tipo de serviço); se **paga**, ajusta o Saldo na Conta.
 - `agent_set_balance_by_phone(phone, valor)` → define o saldo.
 - `agent_log_message(phone, role, content)` / `agent_recent_messages(phone, limit)` → memória da conversa.
 - `canon_phone(p)` → normaliza telefone BR (casa número **com ou sem** o 9).
 
 ### Scripts SQL (na raiz do projeto)
 `schema.sql`, `agent_setup.sql`, `agent_actions.sql`, `canon_phone.sql`, `fix_summary_month.sql`,
-`entradas_mes.sql` (received_month/paid_month), `agent_memory.sql` (tabela + RPCs de memória).
+`entradas_mes.sql` (received_month/paid_month), `agent_memory.sql` (tabela + RPCs de memória),
+`services_setup.sql` (tabela services + RLS), `descriptions_setup.sql` (tabela descriptions + RLS).
 
 ---
 
@@ -146,10 +153,12 @@ Cliente manda no WhatsApp
 - **Memória de conversa**: lembra as últimas mensagens por número (resolve "e a receber?", "me refiro ao próximo mês").
 - **Distingue conceitos**: "entradas/recebi" (já entrou) ≠ "a receber/esperada" (pendente). Rótulos com o nome
   do mês (ex.: "junho").
+- **Service type**: o snapshot financeiro inclui `[serviço: X]` para itens com `service_type`, permitindo perguntas como "quantos clientes do tráfego estão devendo?"
 
 ### Exemplos que o agente entende
 - Registrar: *"paguei 150 de luz no pix"*, *"recebi 2000 da Maria de consultoria"*,
   *"cadastre a cliente Juliana Chieppe, serviço de vídeos, 2000 pro dia 30"* (vira pendência com Nome=Juliana).
+  O agente também preenche o campo `service_type` quando identifica o tipo de serviço.
 - Saldo: *"qual meu saldo?"*, *"meu saldo é 3000"*.
 - Consultas: *"quanto recebi esse mês?"* (entradas), *"quanto tenho a receber?"* (esperado),
   *"quais contas a pagar e quais clientes faltam pagar?"* (resposta com as duas seções),
@@ -167,8 +176,8 @@ Cliente manda no WhatsApp
 
 | Item | Local |
 |------|-------|
-| App web | Netlify · https://emdia-financas.netlify.app · site id `90c48fa9-ae6d-45c1-939d-a9a6c2346c09` |
-| Código do app | pasta raiz (`src/`) |
+| App web | Vercel · https://emdia-web.vercel.app |
+| Código do app (web) | GitHub `lemureagencia/emdia-web` (público) · pasta raiz (`src/`) |
 | Banco/funções | Supabase (`vwlscymvrtmkuejtkies`) |
 | Agente (código) | pasta `agent/` · GitHub `lemureagencia/emdia-agent` |
 | Agente (rodando) | Easypanel · `https://evolution-emdia-agent.iyrj6w.easypanel.host` |
@@ -188,11 +197,13 @@ Cliente manda no WhatsApp
 - Secret / service_role key (servidor/agente): `sb_secret_RQ2R1Cts0uV9k_Dh_jJZAA_6QYXZYnq`
 - Management token (rodar SQL via API): `sbp_cbef3da7f274f1070b71971ae262ebfdb879be89`
 
-### Netlify (app web)
+### Netlify (legado — migrou para Vercel)
 - Token: `nfp_YdFG9vMEddAKVwQVSjc4tys59gqnmYkH2c5e`
-- Site: `emdia-financas` · id `90c48fa9-ae6d-45c1-939d-a9a6c2346c09`
+- Site: `emdia-financas` · id `90c48fa9-ae6d-45c1-939d-a9a6c2346c09` (créditos esgotados, não utilizado)
 
-### GitHub (repo do agente `lemureagencia/emdia-agent`)
+### GitHub
+- **Repo web** (`lemureagencia/emdia-web`): público, deploy automático via Vercel.
+- **Repo agent** (`lemureagencia/emdia-agent`): privado.
 - Personal Access Token: `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`
 - Uso no push: `git push https://lemureagencia:<TOKEN>@github.com/lemureagencia/emdia-agent.git main`
 
@@ -206,8 +217,23 @@ Cliente manda no WhatsApp
 | Onde mudou | Como publicar |
 |------------|----------------|
 | **Banco** (arquivo `.sql`) | Rodar o SQL no SQL Editor do Supabase (ou via Management API com o token). |
-| **App web** (`src/`) | `npm run build` → deploy do `dist/` no Netlify (token acima). |
+| **App web** (`src/`) | `git push origin main` → Vercel faz deploy automático. |
 | **Agente** (`agent/`) | `git push` na `main` do `emdia-agent` → **Deploy** no Easypanel. |
+
+---
+
+## 10. Histórico de mudanças recentes (27/06/2026)
+
+### Funcionalidades novas
+- **Edição em todas as abas**: Metas, Transações e Pendências agora têm botão ✏️ para editar registros.
+- **Campo "Tipo de serviço/produto"**: dropdown em Transações e Pendências com serviços criados pelo usuário (tabela `services`). Criação inline de novos serviços.
+- **Descrições padrão em Pendências**: dropdown com descrições salvas + texto livre. Descrições novas são salvas automaticamente como padrão (tabela `descriptions`).
+
+### Infraestrutura
+- **Migração Netlify → Vercel**: deploy automático a cada push no GitHub (`lemureagencia/emdia-web`).
+- **GitHub**: repo web público, repo agent privado (`lemureagencia/emdia-agent`).
+- **Banco**: criadas tabelas `services` e `descriptions` com RLS.
+- **Agente**: atualizado para aceitar `p_service_type` no registro, exibir `[serviço: X]` no snapshot.
 
 ---
 
@@ -218,3 +244,5 @@ Cliente manda no WhatsApp
 - Gráficos do Painel com dados reais por mês.
 - Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
 - **Rotacionar as chaves** desta seção (boa prática de segurança).
+- Deploy do agente com mudanças de `service_type` no GitHub `emdia-agent` + Easypanel.
+- Atualizar `agent_setup.sql` e `agent_actions.sql` no repo do agent com as novas colunas.
