@@ -3,7 +3,7 @@
 Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
 Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 
-> Última atualização: 27/06/2026 (sessão 2).
+> Última atualização: 27/06/2026 (sessão 3).
 
 ---
 
@@ -92,16 +92,18 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - **Segurança**: RLS ativo — cada usuário só vê os próprios dados.
 
 ### Tabelas
-- **profiles**: `id`, `full_name`, `phone` (WhatsApp), `current_balance` (saldo manual).
+- **profiles**: `id`, `full_name`, `phone` (WhatsApp legado), `current_balance` (saldo manual), `plan` (`mensal`/`semestral`/`anual`, default `mensal`).
 - **transactions**: `type` (income/expense), `status` (paid/pending), `amount`, `description` (= Descrição),
   `category` (= **Nome** do cliente), `service_type` (tipo de serviço/produto, opcional), `due_date`, `paid_date`, `payment_method` (pix/card/cash),
   parcelas (`installments`, `installment_number`, `installment_group`), `goal_id`.
 - **goals**: `title`, `target_amount`, `current_amount`, `deadline`.
 - **services**: `user_id`, `name` — categorias de serviço/produto criadas pelo usuário (usado no campo `service_type`).
 - **descriptions**: `user_id`, `text` — catálogo de descrições padrão do usuário (gerenciado pela página Catálogo; aparece no dropdown de Pendências e é consultado pelo agente).
+- **user_phones**: `user_id`, `phone` — múltiplos números de WhatsApp por usuário. Limite pelo plano: mensal=1, semestral=2, anual=4. Gerenciado pela página Conectar Agente.
 - **agent_messages**: memória curta da conversa do agente (`phone_norm`, `role`, `content`, `created_at`).
 
 ### Funções (RPC) usadas pelo agente (executadas só com a service_role)
+- `_phone_to_user_id(phone)` → helper interno: busca `user_id` checando `profiles.phone` **e** `user_phones` (suporta múltiplos números).
 - `get_summary_by_phone(phone)` → resumo completo: saldo, recebido/pago do mês, a receber/pagar (do mês),
   vencidos, lista de pendências (com `category`/Nome) e metas.
 - `get_financial_summary(user_id)` → inclui `received_month` e `paid_month` (entradas/saídas **já realizadas no mês**).
@@ -116,7 +118,8 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 `schema.sql`, `agent_setup.sql`, `agent_actions.sql`, `canon_phone.sql`, `fix_summary_month.sql`,
 `entradas_mes.sql` (received_month/paid_month), `agent_memory.sql` (tabela + RPCs de memória),
 `services_setup.sql` (tabela services + RLS), `descriptions_setup.sql` (tabela descriptions + RLS),
-`catalog_setup.sql` (UPDATE policy em descriptions + RPC `get_descriptions_by_phone`).
+`catalog_setup.sql` (UPDATE policy em descriptions + RPC `get_descriptions_by_phone`),
+`plans_setup.sql` (planos + tabela `user_phones` + RLS + migração + RPCs atualizados).
 
 ---
 
@@ -193,24 +196,22 @@ Cliente manda no WhatsApp
 
 ## 7. Credenciais e tokens de acesso
 
-> ⚠️ **SEGREDO. Não comitar em repositório público nem compartilhar.** Recomenda-se **rotacionar
-> periodicamente** (especialmente o token do GitHub, que tem escopos amplos, e a service_role do Supabase).
-> Cópia também em `credenciais.md`.
+> ⚠️ **SEGREDO. Valores reais ficam SOMENTE em `credenciais.md` (arquivo local, no .gitignore).**
+> Este arquivo é público — não escreva tokens aqui. Rotacione periodicamente.
 
 ### Supabase (projeto `vwlscymvrtmkuejtkies`)
 - API URL: `https://vwlscymvrtmkuejtkies.supabase.co`
-- Publishable key (frontend): `sb_publishable_Xep6roK5K9Zpo_GGhQ9xFw_9VPxxu8P`
-- Secret / service_role key (servidor/agente): `sb_secret_RQ2R1Cts0uV9k_Dh_jJZAA_6QYXZYnq`
-- Management token (rodar SQL via API): `sbp_cbef3da7f274f1070b71971ae262ebfdb879be89`
+- Publishable key (frontend): ver `credenciais.md`
+- Secret / service_role key (servidor/agente): ver `credenciais.md`
+- Management token (rodar SQL via API): ver `credenciais.md`
 
 ### Netlify (legado — migrou para Vercel)
-- Token: `nfp_YdFG9vMEddAKVwQVSjc4tys59gqnmYkH2c5e`
 - Site: `emdia-financas` · id `90c48fa9-ae6d-45c1-939d-a9a6c2346c09` (créditos esgotados, não utilizado)
 
 ### GitHub
 - **Repo web** (`lemureagencia/emdia-web`): público, deploy automático via Vercel.
 - **Repo agent** (`lemureagencia/emdia-agent`): privado.
-- Personal Access Token: `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`
+- Personal Access Token: ver `credenciais.md`
 - Uso no push: `git push https://lemureagencia:<TOKEN>@github.com/lemureagencia/emdia-agent.git main`
 
 ### Easypanel / Groq / Zernio
@@ -229,6 +230,23 @@ Cliente manda no WhatsApp
 ---
 
 ## 10. Histórico de mudanças recentes
+
+### Sessão 3 — 27/06/2026
+
+#### Planos e múltiplos números de WhatsApp
+- **Sistema de planos**: campo `plan` em `profiles` (`mensal`/`semestral`/`anual`). Limites: mensal=1, semestral=2, anual=4 números.
+- **Tabela `user_phones`**: múltiplos números por conta, com RLS. Números existentes em `profiles.phone` migrados automaticamente pelo `plans_setup.sql`.
+- **RPC helper `_phone_to_user_id`**: todas as funções do agente agora buscam o usuário em `profiles.phone` **e** `user_phones` — suporta múltiplos números sem alterar o agente Python.
+- **Página Conectar Agente reformulada**:
+  - Badge do plano atual (Mensal / Semestral / Anual) com cores distintas.
+  - Lista dos números cadastrados com botão de remover.
+  - Contador de slots usados (X de N).
+  - Formulário de adicionar número (bloqueado ao atingir limite, com mensagem de upgrade).
+  - Banner verde "Número salvo com sucesso!" após salvar (3 segundos, com animação).
+  - Banner vermelho para erros (número duplicado, etc.).
+- **Banco**: rodar `plans_setup.sql` no Supabase SQL Editor.
+
+---
 
 ### Sessão 2 — 27/06/2026
 
