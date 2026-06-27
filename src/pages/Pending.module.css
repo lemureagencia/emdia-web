@@ -1,0 +1,105 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-2);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.summaryTitle {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.summaryValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.summaryHint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.success { color: var(--color-success); }
+.danger { color: var(--color-danger); }
+.warning { color: var(--color-warning); }
+
+.tableContainer {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th {
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table td {
+  padding: var(--spacing-4);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.typeIncome { background-color: var(--color-success-bg); color: var(--color-success); }
+.typeExpense { background-color: var(--color-danger-bg); color: var(--color-danger); }
+.statusPending { background-color: var(--color-warning-bg); color: var(--color-warning); }
+.statusOverdue { background-color: var(--color-danger-bg); color: var(--color-danger); }
+
+.amountIncome { color: var(--color-success); font-weight: 600; }
+.amountExpense { color: var(--color-danger); font-weight: 600; }
+
+.rowActions {
+  display: flex;
+  gap: var(--spacing-1);
+  justify-content: flex-end;
+}

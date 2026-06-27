@@ -1,0 +1,510 @@
+# MCP
+
+> Connect AI assistants to the Zernio API using the Model Context Protocol
+
+Source: Zernio API Documentation (https://docs.zernio.com)
+API Base URL: https://zernio.com/api/v1
+
+---
+
+# MCP
+
+Connect AI assistants to the Zernio API using the Model Context Protocol
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+Connect AI assistants to the full Zernio API using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). Schedule posts, manage ads, automate DMs, run sequences, and more across 14 platforms, all through natural language.
+
+<Callout type="info">
+The Zernio MCP server exposes 300+ tools auto-generated from the Zernio OpenAPI spec, covering every API endpoint. It works with Claude, Claude Code, ChatGPT, Cursor, Windsurf, and any MCP-compatible client.
+</Callout>
+
+## Use Zernio in your AI client
+
+Zernio runs as a single hosted MCP server at `https://mcp.zernio.com/mcp`. Pick your client:
+
+**Claude (web, desktop, mobile)** — Settings → Connectors → Add custom connector, then enter `https://mcp.zernio.com/mcp`. You sign in with your Zernio account (OAuth); no API key needed. Full steps in [Setup](#setup) below.
+
+**Claude Code** — install the plugin:
+
+```
+/plugin marketplace add zernio-dev/zernio-claude-plugin
+/plugin install zernio@zernio
+```
+
+It prompts once for your [Zernio API key](https://zernio.com/dashboard/api-keys) (stored in your system keychain).
+
+**ChatGPT** — add a connector pointing at `https://mcp.zernio.com/mcp` and authorize with your Zernio account (OAuth).
+
+**Any MCP client / the MCP Registry** — Zernio is published to the [official MCP Registry](https://registry.modelcontextprotocol.io) as `com.zernio/zernio`. Most MCP clients can add the remote server directly:
+
+```
+https://mcp.zernio.com/mcp
+```
+
+Authenticate with OAuth (sign in with Zernio) or an `Authorization: Bearer <your API key>` header.
+
+## What You Can Do
+
+Ask your AI assistant things like:
+
+- *"Post 'Hello world!' to Twitter"*
+- *"Schedule a LinkedIn post for tomorrow at 9am"*
+- *"Show my connected accounts"*
+- *"Cross-post this to Twitter and LinkedIn"*
+- *"Post this image to Instagram"* (with browser upload flow)
+- *"List my ad campaigns"*
+- *"Send a WhatsApp broadcast to my contacts"*
+- *"Show my inbox conversations"*
+- *"Create a comment automation for my latest post"*
+
+## Setup
+
+Choose your preferred setup method:
+
+<Tabs items={['Hosted (recommended)', 'Local (uvx)', 'Local (pip)']}>
+<Tab value="Hosted (recommended)">
+
+The hosted MCP server at `mcp.zernio.com` requires no local installation. Just configure your client to connect over HTTP.
+
+<Steps>
+
+<Step>
+### Get Your API Key
+
+Go to [zernio.com/dashboard/api-keys](https://zernio.com/dashboard/api-keys) and create an API key.
+</Step>
+
+<Step>
+### Configure Your Client
+
+#### Claude Desktop
+
+Claude Desktop's `claude_desktop_config.json` only supports local stdio servers (`command` + `args`). Remote servers like `mcp.zernio.com` are added through the GUI instead.
+
+<Callout type="info">
+The `url` + `headers` form for `claude_desktop_config.json` shown in older guides does not work in current Claude Desktop builds — that file is stdio-only.
+</Callout>
+
+Open Claude Desktop and go to **Settings → Connectors → Add custom connector**:
+
+- **Name:** Zernio
+- **URL:** `https://mcp.zernio.com/mcp`
+
+Click **Add**. Claude redirects you to sign in and authorize with your Zernio account (OAuth), then the connector activates. You don't paste an API key for this path. The sign-in flow handles authorization.
+
+<Callout type="warn">
+If you tried this before and saw "Couldn't reach the MCP server", remove the connector and add it again. Claude caches a failed authorization attempt, so a stale failure persists until you re-add it.
+</Callout>
+
+If you'd rather configure it in `claude_desktop_config.json`, use the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) stdio bridge:
+
+<Tabs items={['macOS', 'Windows']}>
+<Tab value="macOS">
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+</Tab>
+<Tab value="Windows">
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+</Tab>
+</Tabs>
+
+```json
+{
+  "mcpServers": {
+    "zernio": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.zernio.com/mcp",
+        "--header",
+        "Authorization: Bearer your_api_key_here"
+      ]
+    }
+  }
+}
+```
+
+<Callout type="warn">
+Paste the full `sk_...` API key directly into the `--header` value. Earlier examples used an `${AUTH}` env-var indirection, but Claude Desktop on Windows does not always expand env vars into `npx` args, which leaves the header empty and causes a misleading 404 / OAuth-discovery error.
+</Callout>
+
+#### Cursor
+
+Add to your project's `.cursor/mcp.json`:
+
+```json
+{
+  "zernio": {
+    "type": "http",
+    "url": "https://mcp.zernio.com/mcp",
+    "headers": {
+      "Authorization": "Bearer your_api_key_here"
+    }
+  }
+}
+```
+
+</Step>
+
+<Step>
+### Restart Your Client
+
+Close and reopen your AI client. The Zernio integration will be available immediately.
+</Step>
+
+</Steps>
+
+</Tab>
+<Tab value="Local (uvx)">
+
+Run the MCP server locally using uvx (no install needed).
+
+<Steps>
+
+<Step>
+### Install uv
+
+<Tabs items={['macOS / Linux', 'Windows']}>
+<Tab value="macOS / Linux">
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+</Tab>
+<Tab value="Windows">
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+</Tab>
+</Tabs>
+</Step>
+
+<Step>
+### Get Your API Key
+
+Go to [zernio.com/dashboard/api-keys](https://zernio.com/dashboard/api-keys) and create an API key.
+</Step>
+
+<Step>
+### Configure Claude Desktop
+
+Open Claude Desktop settings and go to **Developer** > **Edit Config**:
+
+![Claude Desktop Developer Settings](/docs-static/claude-desktop-config.png)
+
+Edit `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "zernio": {
+      "command": "uvx",
+      "args": ["--from", "zernio-sdk[mcp]", "zernio-mcp"],
+      "env": {
+        "ZERNIO_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
+```
+</Step>
+
+<Step>
+### Restart Claude Desktop
+
+Close and reopen Claude Desktop. The Zernio integration will be available immediately.
+</Step>
+
+</Steps>
+
+</Tab>
+<Tab value="Local (pip)">
+
+Install the MCP server via pip.
+
+```bash
+pip install zernio-sdk[mcp]
+```
+
+Configure Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "zernio": {
+      "command": "zernio-mcp",
+      "env": {
+        "ZERNIO_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+`pip install zernio-sdk[mcp]` puts the `zernio-mcp` command on your PATH. If Claude Desktop can't find it, use the absolute path (run `which zernio-mcp` to get it) or the uvx method above.
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+Replace `your_api_key_here` with your actual API key.
+</Callout>
+
+## Available Tools
+
+The MCP server exposes 280+ tools covering the entire Zernio API. Here are the main categories:
+
+### Core Tools
+
+These hand-crafted tools provide the best experience for common tasks:
+
+| Tool | Description |
+|------|-------------|
+| `accounts_list` | Show all connected social media accounts |
+| `accounts_get` | Get account details for a specific platform |
+| `profiles_list` / `get` / `create` / `update` / `delete` | Manage profiles |
+| `posts_list` / `get` / `create` / `update` / `delete` | Manage posts |
+| `posts_publish_now` | Publish a post immediately |
+| `posts_cross_post` | Post to multiple platforms at once |
+| `posts_retry` / `posts_list_failed` / `posts_retry_all_failed` | Handle failed posts |
+| `media_generate_upload_link` | Get a link to upload media files |
+| `media_check_upload_status` | Check if media upload is complete |
+| `docs_search` | Search the Zernio API documentation |
+
+### Auto-Generated Tools
+
+These tools are auto-generated from the OpenAPI spec and cover every endpoint:
+
+| Category | Examples |
+|----------|---------|
+| **Ads** | `list_ad_campaigns`, `create_standalone_ad`, `boost_post`, `get_ad_analytics`, `search_ad_interests` |
+| **WhatsApp** | `create_whats_app_broadcast`, `send_whats_app_bulk`, `get_whats_app_contacts`, `create_whats_app_template` |
+| **Inbox** | `list_inbox_conversations`, `send_inbox_message`, `reply_to_inbox_post`, `list_inbox_reviews` |
+| **Contacts** | `list_contacts`, `create_contact`, `bulk_create_contacts`, `set_contact_field_value` |
+| **Sequences** | `create_sequence`, `enroll_contacts`, `activate_sequence`, `pause_sequence` |
+| **Comment Automations** | `create_comment_automation`, `list_comment_automation_logs` |
+| **Broadcasts** | `create_broadcast`, `schedule_broadcast`, `send_broadcast` |
+| **Analytics** | `get_analytics`, `get_best_time_to_post`, `get_instagram_demographics`, `get_you_tube_daily_views` |
+| **Connect** | `get_connect_url`, `handle_o_auth_callback`, `connect_bluesky_credentials` |
+| **Webhooks** | `create_webhook_settings`, `get_webhook_logs`, `test_webhook` |
+
+<Callout type="info">
+The auto-generated tools update automatically when new API endpoints are added. You always have access to the latest Zernio API features.
+</Callout>
+
+## Tool Reference
+
+Detailed parameters for the core tools.
+
+### Posts
+
+<Callout type="warn">
+**Multi-account users (agencies, multi-client setups):** when you have more than one account on the same platform, you must pass `account_id` (or `profile_id`) to disambiguate. The write tools below return an error with the candidate account IDs if the selection is ambiguous, instead of silently picking one. Call `accounts_list` first to discover IDs. Available in `zernio-sdk` 1.4.0+.
+</Callout>
+
+#### `posts_create`
+
+Create a social media post. Can be saved as DRAFT, SCHEDULED, or PUBLISHED immediately.
+
+<Callout type="warn">
+**Choose the correct mode based on user intent:**
+
+- **DRAFT MODE** (`is_draft=true`): Use when user says "draft", "save for later", "don't publish". Post is saved but NOT published.
+- **IMMEDIATE MODE** (`publish_now=true`): Use when user says "publish now", "post now", "immediately". Post goes live right away.
+- **SCHEDULED MODE** (default): Use when user says "schedule", "in X minutes/hours". Post is scheduled for future publication.
+</Callout>
+
+| Parameter | Type | Description | Required | Default |
+|-----------|------|-------------|----------|---------|
+| `content` | `string` | The post text/content | Yes | - |
+| `platform` | `string` | Target platform: twitter, instagram, linkedin, tiktok, bluesky, facebook, youtube, pinterest, threads, googlebusiness, telegram, snapchat | Yes | - |
+| `account_id` | `string` | Specific account to post from. Required when the user has multiple accounts on this platform. Call `accounts_list` to find IDs. | No | `""` |
+| `profile_id` | `string` | Scope account auto-resolution to one profile (e.g. one client in an agency setup). Use when `account_id` is unknown but the target profile is. | No | `""` |
+| `is_draft` | `boolean` | Set to true to save as DRAFT (not published, not scheduled) | No | `false` |
+| `publish_now` | `boolean` | Set to true to publish IMMEDIATELY | No | `false` |
+| `schedule_minutes` | `integer` | Minutes from now to schedule. Only used when is_draft=false AND publish_now=false | No | `60` |
+| `media_urls` | `string` | Comma-separated URLs of media files to attach (images, videos) | No | `""` |
+| `title` | `string` | Post title (required for YouTube, recommended for Pinterest) | No | `""` |
+
+#### `posts_publish_now`
+
+Publish a post immediately to a platform. Convenience wrapper around `posts_create` with `publish_now=true`.
+
+| Parameter | Type | Description | Required | Default |
+|-----------|------|-------------|----------|---------|
+| `content` | `string` | The post text/content | Yes | - |
+| `platform` | `string` | Target platform | Yes | - |
+| `account_id` | `string` | Specific account ID. Required when the user has multiple accounts on this platform. | No | `""` |
+| `profile_id` | `string` | Scope auto-resolution to a single profile when `account_id` is unknown. | No | `""` |
+| `media_urls` | `string` | Comma-separated URLs of media files to attach | No | `""` |
+
+#### `posts_cross_post`
+
+Post the same content to multiple platforms at once. To target multiple accounts of the *same* platform in one call, repeat the platform: `platforms="twitter,twitter"`, `account_ids="acc_a,acc_b"`.
+
+| Parameter | Type | Description | Required | Default |
+|-----------|------|-------------|----------|---------|
+| `content` | `string` | The post text/content | Yes | - |
+| `platforms` | `string` | Comma-separated list of platforms (e.g., 'twitter,linkedin,bluesky'). Repeat a platform to target multiple accounts of it. | Yes | - |
+| `account_ids` | `string` | Comma-separated account IDs, parallel to `platforms`. Empty positions fall back to profile/auto-resolution. Required for multi-account users to disambiguate. | No | `""` |
+| `profile_id` | `string` | Scope auto-resolution to one profile when `account_ids` is empty. | No | `""` |
+| `is_draft` | `boolean` | Set to true to save as DRAFT (not published) | No | `false` |
+| `publish_now` | `boolean` | Set to true to publish IMMEDIATELY to all platforms | No | `false` |
+| `media_urls` | `string` | Comma-separated URLs of media files to attach | No | `""` |
+
+#### `posts_create_post`
+
+Autogenerated tool that mirrors the full `createPost` REST surface. Use this instead of `posts_create` when you need per-target customisation that the simplified tool doesn't expose: `customContent` (different caption per platform), `customMedia` (different attachments per target), per-target `scheduledFor`, or `platformSpecificData` (TikTok privacy, YouTube category, etc.). The `platforms` argument is a JSON-encoded array of objects with `platform`, `accountId`, and any per-target overrides. Available in `zernio-sdk` 1.4.0+.
+
+#### `posts_list`
+
+| Parameter | Type | Description | Required | Default |
+|-----------|------|-------------|----------|---------|
+| `status` | `string` | Filter by status: draft, scheduled, published, failed | No | `""` |
+| `limit` | `integer` | Maximum number of posts to return | No | `10` |
+
+#### `posts_get` / `posts_delete` / `posts_retry`
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `post_id` | `string` | The post ID | Yes |
+
+#### `posts_update`
+
+| Parameter | Type | Description | Required | Default |
+|-----------|------|-------------|----------|---------|
+| `post_id` | `string` | The post ID to update | Yes | - |
+| `content` | `string` | New content | No | `""` |
+| `scheduled_for` | `string` | New schedule time (ISO string) | No | `""` |
+| `title` | `string` | New title | No | `""` |
+
+### Media
+
+#### `media_generate_upload_link`
+
+Generate a unique upload URL for the user to upload files via browser. The flow is:
+1. Call this tool to get an upload URL
+2. Ask the user to open the URL in their browser
+3. User uploads files through the web interface
+4. Call `media_check_upload_status` to get the uploaded file URLs
+5. Use those URLs when creating the post with `posts_create`
+
+#### `media_check_upload_status`
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `token` | `string` | The upload token from media_generate_upload_link | Yes |
+
+## Uploading Images & Videos
+
+Since AI clients can't access files on your computer directly, we use a browser upload flow:
+
+<Steps>
+
+<Step>
+### Ask to Create an Upload Link
+
+Say something like: *"I want to post an image to Instagram"*
+
+The assistant will give you a unique upload URL.
+</Step>
+
+<Step>
+### Upload Your File
+
+Open the URL in your browser. You'll see a simple upload page where you can drag & drop your image or video.
+</Step>
+
+<Step>
+### Confirm Upload
+
+Just say *"done"* or *"uploaded"*. The assistant will check the status and create your post with the media attached.
+</Step>
+
+</Steps>
+
+**Supported file types:**
+- Images: JPG, PNG, WebP, GIF
+- Videos: MP4, MOV, WebM
+- Documents: PDF
+
+**Maximum file size:** 5GB
+
+## Example Conversations
+
+### Simple Post
+
+> **You:** Post "Just launched our new feature!" to Twitter
+>
+> **Assistant:** Published to Twitter (@yourhandle)
+> Post ID: post_abc123
+
+### Scheduled Post
+
+> **You:** Schedule a LinkedIn post for tomorrow at 9am: "Excited to announce our Series A funding!"
+>
+> **Assistant:** Scheduled for LinkedIn (@yourcompany)
+> Post ID: post_xyz789
+> Scheduled: 2025-03-15 09:00
+
+### Cross-Posting
+
+> **You:** Post "Big news coming soon..." to Twitter and LinkedIn
+>
+> **Assistant:** Published to: twitter, linkedin
+> Post ID: post_multi456
+
+### With Image
+
+> **You:** I want to post a product photo to Instagram
+>
+> **Assistant:** Upload link generated! Open this link in your browser to upload: https://...
+>
+> **You:** done
+>
+> **Assistant:** Upload completed! 1 file uploaded. Creating the post...
+> Published to Instagram with 1 media file
+
+## Troubleshooting
+
+### "Command not found: uvx" (local setup only)
+
+Make sure uv is installed and in your PATH:
+
+```bash
+# Check if installed
+uvx --version
+
+# If not, install it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+You may need to restart your terminal or add uv to your PATH.
+
+### "Invalid API key"
+
+1. Check your API key at [zernio.com/dashboard/api-keys](https://zernio.com/dashboard/api-keys)
+2. Make sure you copied it correctly (no extra spaces)
+3. Verify the key is active
+
+### "No accounts connected"
+
+You need to connect social media accounts at [zernio.com](https://zernio.com) before you can post.
+
+### Changes not taking effect
+
+After editing your client's MCP configuration, you must restart the client completely.
+
+## Links
+
+- [Zernio Dashboard](https://zernio.com)
+- [Get API Key](https://zernio.com/dashboard/api-keys)
+- [Python SDK](https://github.com/zernio-dev/zernio-python)
+- [SDKs](/sdks)
+- [MCP Protocol](https://modelcontextprotocol.io/)

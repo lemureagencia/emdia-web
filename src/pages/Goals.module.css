@@ -1,0 +1,85 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-2);
+}
+
+.goalsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--spacing-4);
+}
+
+.goalCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.goalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-4);
+}
+
+.goalTitle {
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-1);
+}
+
+.goalDeadline {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.progressContainer {
+  margin-bottom: var(--spacing-4);
+}
+
+.progressStats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  margin-bottom: var(--spacing-2);
+}
+
+.currentAmount {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.targetAmount {
+  color: var(--color-text-muted);
+}
+
+.progressBarBg {
+  height: 8px;
+  background-color: var(--color-surface-hover);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.goalFooter {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+}

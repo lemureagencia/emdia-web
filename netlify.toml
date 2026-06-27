@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback: todas as rotas do React Router caem no index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

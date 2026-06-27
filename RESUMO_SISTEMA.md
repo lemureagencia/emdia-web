@@ -1,0 +1,220 @@
+# EmDia — Resumo do Sistema
+
+Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
+Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
+
+> Última atualização: 27/06/2026.
+
+---
+
+## 1. Visão geral da arquitetura
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
+│  App Web (EmDia)│────▶│   Supabase (banco)   │◀────│  Agente WhatsApp     │
+│ React+Vite      │     │  Postgres + RLS      │     │  Python/FastAPI      │
+│ Netlify         │     │  + funções RPC       │     │  (VPS/Easypanel)     │
+└─────────────────┘     └──────────────────────┘     └──────────┬──────────┘
+                                                                 │
+                                          Zernio (WhatsApp oficial, coexistência)
+                                                                 │
+                                                          WhatsApp do cliente
+```
+
+- **App web**: o usuário gerencia finanças pela tela.
+- **Supabase**: banco único, compartilhado pelo app e pelo agente. Toda regra/dado mora aqui.
+- **Agente**: recebe mensagens no WhatsApp, interpreta com IA e grava/consulta no Supabase.
+
+---
+
+## 2. Conceito central: Transações × Pendências
+
+O sistema separa **dinheiro que já se moveu** de **dinheiro que ainda vai se mover**. Tudo vive na
+mesma tabela `transactions`, diferenciado pela coluna **`status`**:
+
+| Aba | `status` | O que é | Exemplos |
+|-----|----------|---------|----------|
+| **Transações** | `paid` | Já concluído (entrou/saiu) | Cliente pagou, paguei uma conta |
+| **Pendências** | `pending` | Ainda em aberto | Cliente que vai pagar, conta a pagar, vencidos |
+
+- Apagar/editar em **Transações** não afeta **Pendências** (cada aba filtra seu `status`).
+- Quando uma pendência é marcada como paga (✓), ela **migra** para Transações automaticamente.
+- **Parcelamento** gera parcelas futuras (pendentes) → fica na aba **Pendências**.
+
+### Terminologia (Entradas / Saídas)
+- **Entrada** = receita (dinheiro que entra). **Saída** = despesa (dinheiro que sai).
+- No Painel: **Entradas/Saídas** = pagos (de Transações); **A Receber / A Pagar / Vencidos** = pendentes (de Pendências).
+
+### Campos "Nome" e "Descrição"
+- A coluna **Nome** (cliente) é guardada no campo `category` do banco.
+- A coluna **Descrição** (o que foi vendido/pago) é o campo `description`.
+- (Registros antigos podem ter esses dois trocados — corrigir pelo botão **Editar**.)
+
+---
+
+## 3. App Web (Front-end)
+
+- **Stack**: React + Vite + TypeScript, CSS puro (design system próprio), Recharts, Lucide Icons.
+- **Hospedagem**: **Netlify** → https://emdia-financas.netlify.app
+- **Auth**: Supabase Auth (e-mail/senha), com auto-confirmação ligada.
+- **Idioma**: Português (BR). Datas/moeda em pt-BR (R$).
+
+### Telas
+- **Login / Cadastro** — com logo da marca.
+- **Painel** (Dashboard):
+  - **Saldo na Conta** → valor **manual** (você digita quanto tem no banco). Isolado.
+  - **Entradas / Saídas** → soma dos lançamentos **pagos** (Transações).
+  - **Pendências do mês**: A Receber, Contas a Pagar, Vencidos — só do **mês atual + atrasados**.
+  - Gráficos (ilustrativos).
+- **Transações**: lista **apenas concluídos** (`status='paid'`). Cria movimentação já paga/recebida
+  (tipo Entrada/Saída, forma de pagamento, data, valor, Nome do cliente, destinar a meta).
+  Colunas: **Nome** · **Descrição** · Data · Tipo · Situação · Forma · Valor. Tem **Editar** ✏️ e Excluir.
+- **Pendências**: itens em aberto (a receber / a pagar / vencidos), com **filtro** de abas:
+  **Todos · A receber (clientes) · A pagar (contas) · Vencidos**. Marcar como pago ✓, **Editar** ✏️,
+  Excluir. Suporta **parcelamento** (gera N parcelas mês a mês).
+- **Metas**: progresso (quanto falta / quanto chegou / %).
+- **Conectar Agente**: o cliente cadastra o **número de WhatsApp** dele (é assim que o agente o identifica).
+
+### Saldo em conta (manual)
+O "Saldo na Conta" é digitado pelo usuário (campo em Transações) e guardado em `profiles.current_balance`.
+Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticamente.
+
+---
+
+## 4. Supabase (Back-end / Banco)
+
+- **Projeto**: `https://vwlscymvrtmkuejtkies.supabase.co`
+- **Segurança**: RLS ativo — cada usuário só vê os próprios dados.
+
+### Tabelas
+- **profiles**: `id`, `full_name`, `phone` (WhatsApp), `current_balance` (saldo manual).
+- **transactions**: `type` (income/expense), `status` (paid/pending), `amount`, `description` (= Descrição),
+  `category` (= **Nome** do cliente), `due_date`, `paid_date`, `payment_method` (pix/card/cash),
+  parcelas (`installments`, `installment_number`, `installment_group`), `goal_id`.
+- **goals**: `title`, `target_amount`, `current_amount`, `deadline`.
+- **agent_messages**: memória curta da conversa do agente (`phone_norm`, `role`, `content`, `created_at`).
+
+### Funções (RPC) usadas pelo agente (executadas só com a service_role)
+- `get_summary_by_phone(phone)` → resumo completo: saldo, recebido/pago do mês, a receber/pagar (do mês),
+  vencidos, lista de pendências (com `category`/Nome) e metas.
+- `get_financial_summary(user_id)` → inclui `received_month` e `paid_month` (entradas/saídas **já realizadas no mês**).
+- `get_pending_items(user_id)` / `get_goals_summary(user_id)`.
+- `agent_register_by_phone(...)` → registra transação (aceita `p_category` = Nome do cliente); se **paga**, ajusta o Saldo na Conta.
+- `agent_set_balance_by_phone(phone, valor)` → define o saldo.
+- `agent_log_message(phone, role, content)` / `agent_recent_messages(phone, limit)` → memória da conversa.
+- `canon_phone(p)` → normaliza telefone BR (casa número **com ou sem** o 9).
+
+### Scripts SQL (na raiz do projeto)
+`schema.sql`, `agent_setup.sql`, `agent_actions.sql`, `canon_phone.sql`, `fix_summary_month.sql`,
+`entradas_mes.sql` (received_month/paid_month), `agent_memory.sql` (tabela + RPCs de memória).
+
+---
+
+## 5. Agente de IA no WhatsApp (pasta `agent/`)
+
+Serviço **Python (FastAPI)** que conecta o WhatsApp ao EmDia.
+
+### Fluxo
+```
+Cliente manda no WhatsApp
+  → Zernio (API oficial, coexistência) dispara webhook "message.received"
+  → Agente identifica o cliente pelo número (profiles.phone)
+  → Recupera memória da conversa (agent_messages)
+  → Groq (LLM) interpreta / compõe a resposta
+  → Supabase grava/consulta (dados reais, sem alucinação)
+  → Agente responde via Zernio → WhatsApp
+```
+
+### Componentes
+- **Transporte WhatsApp**: **Zernio** (oficial, coexistência). `TRANSPORT=zernio`. (Evolution API é legado/desligado.)
+- **IA**: **Groq** (`llama-3.3-70b-versatile`).
+- **Arquivos**: `main.py` (webhook), `zernio.py` (envio/recebimento), `handler.py` (lógica/respostas),
+  `llm.py` (interpretação + modo inteligente), `emdia.py` (RPC Supabase), `config.py`, `installments.py`.
+- **Hospedagem**: **VPS via Easypanel** (Docker).
+  - URL: `https://evolution-emdia-agent.iyrj6w.easypanel.host`
+  - Repositório: `github.com/lemureagencia/emdia-agent` (branch `main`)
+  - Variáveis (chaves) ficam nas **Environment** do Easypanel (não no código).
+  - **Deploy**: a cada push na `main`, clicar **Deploy** no Easypanel (ou auto-deploy, se ativo).
+
+### Como o agente funciona (importante)
+- **Escrita** (registrar / definir saldo) → caminho **estruturado e seguro**: o LLM extrai os campos e o
+  Python grava valores exatos no banco (sem inventar número). Separa **Nome do cliente** da **Descrição**.
+- **Leitura** (perguntas) → **MODO INTELIGENTE**: o LLM recebe o panorama financeiro real + o histórico
+  da conversa e **compõe** a resposta. Responde perguntas compostas ("contas a pagar **e** clientes a receber"),
+  variadas e com filtro de mês. Regra forte: usar só os números fornecidos, nunca inventar. Se o LLM falhar,
+  cai numa resposta estruturada (rede de segurança).
+- **Memória de conversa**: lembra as últimas mensagens por número (resolve "e a receber?", "me refiro ao próximo mês").
+- **Distingue conceitos**: "entradas/recebi" (já entrou) ≠ "a receber/esperada" (pendente). Rótulos com o nome
+  do mês (ex.: "junho").
+
+### Exemplos que o agente entende
+- Registrar: *"paguei 150 de luz no pix"*, *"recebi 2000 da Maria de consultoria"*,
+  *"cadastre a cliente Juliana Chieppe, serviço de vídeos, 2000 pro dia 30"* (vira pendência com Nome=Juliana).
+- Saldo: *"qual meu saldo?"*, *"meu saldo é 3000"*.
+- Consultas: *"quanto recebi esse mês?"* (entradas), *"quanto tenho a receber?"* (esperado),
+  *"quais contas a pagar e quais clientes faltam pagar?"* (resposta com as duas seções),
+  *"quais contas estão vencidas?"* (lista com nomes), *"resumo"*.
+
+### Regras de acesso
+- **Só responde quem está cadastrado** (`profiles.phone`). Número desconhecido → silêncio total.
+- **Multi-tenant**: cada cliente cadastra o próprio WhatsApp e vê só os dados dele.
+- Casamento de telefone tolerante ao **9º dígito** (com ou sem o 9).
+- Pago/recebido ajusta o Saldo na Conta; pendente vira conta a pagar/receber (não mexe no saldo).
+
+---
+
+## 6. Onde está cada coisa
+
+| Item | Local |
+|------|-------|
+| App web | Netlify · https://emdia-financas.netlify.app · site id `90c48fa9-ae6d-45c1-939d-a9a6c2346c09` |
+| Código do app | pasta raiz (`src/`) |
+| Banco/funções | Supabase (`vwlscymvrtmkuejtkies`) |
+| Agente (código) | pasta `agent/` · GitHub `lemureagencia/emdia-agent` |
+| Agente (rodando) | Easypanel · `https://evolution-emdia-agent.iyrj6w.easypanel.host` |
+| WhatsApp | Zernio (coexistência) · número robô +55 11 97817-6498 |
+
+---
+
+## 7. Credenciais e tokens de acesso
+
+> ⚠️ **SEGREDO. Não comitar em repositório público nem compartilhar.** Recomenda-se **rotacionar
+> periodicamente** (especialmente o token do GitHub, que tem escopos amplos, e a service_role do Supabase).
+> Cópia também em `credenciais.md`.
+
+### Supabase (projeto `vwlscymvrtmkuejtkies`)
+- API URL: `https://vwlscymvrtmkuejtkies.supabase.co`
+- Publishable key (frontend): `sb_publishable_Xep6roK5K9Zpo_GGhQ9xFw_9VPxxu8P`
+- Secret / service_role key (servidor/agente): `sb_secret_RQ2R1Cts0uV9k_Dh_jJZAA_6QYXZYnq`
+- Management token (rodar SQL via API): `sbp_cbef3da7f274f1070b71971ae262ebfdb879be89`
+
+### Netlify (app web)
+- Token: `nfp_YdFG9vMEddAKVwQVSjc4tys59gqnmYkH2c5e`
+- Site: `emdia-financas` · id `90c48fa9-ae6d-45c1-939d-a9a6c2346c09`
+
+### GitHub (repo do agente `lemureagencia/emdia-agent`)
+- Personal Access Token: `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`
+- Uso no push: `git push https://lemureagencia:<TOKEN>@github.com/lemureagencia/emdia-agent.git main`
+
+### Easypanel / Groq / Zernio
+- Chaves do agente (Groq, Zernio, Supabase service_role) ficam nas **Environment** do serviço no Easypanel.
+
+---
+
+## 8. Como publicar mudanças
+
+| Onde mudou | Como publicar |
+|------------|----------------|
+| **Banco** (arquivo `.sql`) | Rodar o SQL no SQL Editor do Supabase (ou via Management API com o token). |
+| **App web** (`src/`) | `npm run build` → deploy do `dist/` no Netlify (token acima). |
+| **Agente** (`agent/`) | `git push` na `main` do `emdia-agent` → **Deploy** no Easypanel. |
+
+---
+
+## 9. Próximos passos / ideias
+- Editar registros pelo agente do WhatsApp (ex.: *"muda o valor da Nicole pra 1500"*).
+- Agente capturar forma de pagamento/meta também.
+- Mensagens de áudio no WhatsApp (transcrição) para o agente.
+- Gráficos do Painel com dados reais por mês.
+- Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
+- **Rotacionar as chaves** desta seção (boa prática de segurança).

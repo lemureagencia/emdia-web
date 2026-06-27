@@ -1,0 +1,167 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: var(--spacing-6);
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-2);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.filterLabel {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.tableContainer {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th {
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table td {
+  padding: var(--spacing-4);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.typeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.typeIncome {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.typeExpense {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.statusPaid {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+/* Linha paga = cinza/apagada; só o selo "Pago" fica em destaque */
+.rowPaid td {
+  color: var(--color-text-muted);
+}
+.rowPaid .typeBadge {
+  opacity: 0.5;
+}
+.rowPaid .statusPaid {
+  opacity: 1;
+}
+
+.statusPending {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.statusOverdue {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.amountIncome {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.amountExpense {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-2);
+  justify-content: flex-end;
+}
+
+.balanceBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding: var(--spacing-5);
+  flex-wrap: wrap;
+}
+
+.balanceLabel {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.balanceHint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.balanceEditor {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.balanceInput {
+  width: 180px;
+}
+
+.balanceValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.balanceSaved {
+  font-size: 0.8rem;
+  color: var(--color-success);
+}

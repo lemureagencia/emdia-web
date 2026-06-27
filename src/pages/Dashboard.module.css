@@ -1,0 +1,123 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-6);
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.dateRange {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.summaryTitle {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.summaryValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.success { color: var(--color-success); }
+.danger { color: var(--color-danger); }
+.warning { color: var(--color-warning); }
+
+.chartsGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+}
+
+@media (max-width: 1024px) {
+  .chartsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chartCard {
+  min-height: 350px;
+}
+
+.recentTransactions {
+  margin-bottom: var(--spacing-6);
+}
+
+.transactionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.transactionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-background);
+}
+
+.transactionInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.transactionIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconIncome { background-color: var(--color-success-bg); color: var(--color-success); }
+.iconExpense { background-color: var(--color-danger-bg); color: var(--color-danger); }
+
+.transactionDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.transactionDesc {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.transactionDate {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.transactionAmount {
+  font-weight: 600;
+}
