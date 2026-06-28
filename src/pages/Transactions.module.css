@@ -165,3 +165,26 @@
   font-size: 0.8rem;
   color: var(--color-success);
 }
+
+@media (max-width: 640px) {
+  .table th,
+  .table td {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: 0.8rem;
+  }
+
+  .balanceBar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-3);
+  }
+
+  .balanceEditor {
+    width: 100%;
+  }
+
+  .balanceInput {
+    width: 100%;
+    flex: 1;
+  }
+}

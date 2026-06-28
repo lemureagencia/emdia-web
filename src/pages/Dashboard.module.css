@@ -18,7 +18,7 @@
 
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--spacing-4);
   margin-bottom: var(--spacing-6);
 }
@@ -42,6 +42,21 @@
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text);
+}
+
+@media (max-width: 640px) {
+  .summaryValue {
+    font-size: 1.25rem;
+  }
+
+  .chartsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .transactionItem {
+    flex-wrap: wrap;
+    gap: var(--spacing-2);
+  }
 }
 
 .success { color: var(--color-success); }

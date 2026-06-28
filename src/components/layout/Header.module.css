@@ -11,6 +11,21 @@
   z-index: 10;
 }
 
+.menuBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text);
+  padding: var(--spacing-2);
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s;
+  margin-right: auto;
+}
+
+.menuBtn:hover {
+  background-color: var(--color-surface-hover);
+}
+
 .actions {
   display: flex;
   align-items: center;
@@ -36,4 +51,16 @@
   align-items: center;
   justify-content: center;
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .header {
+    justify-content: space-between;
+    padding: 0 var(--spacing-4);
+  }
+
+  .menuBtn {
+    display: flex;
+  }
 }

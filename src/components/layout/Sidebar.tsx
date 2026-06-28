@@ -14,11 +14,16 @@ const navItems = [
   { path: '/agent', label: 'Conectar Agente', icon: Bot },
 ];
 
-export const Sidebar = () => {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { signOut } = useAuth();
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={clsx(styles.sidebar, isOpen && styles.open)}>
       <div className={styles.logo}>
         <img src="/logo.png" alt="EmDia" className={clsx(styles.logoImg, "logo-light")} />
         <img src="/logo-dark.png" alt="EmDia" className={clsx(styles.logoImg, "logo-dark")} />
@@ -28,6 +33,7 @@ export const Sidebar = () => {
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={onClose}
             className={({ isActive }) => clsx(styles.navItem, isActive && styles.active)}
           >
             <item.icon size={20} />

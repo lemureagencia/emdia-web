@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, Menu } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
 import styles from './Header.module.css';
 
-export const Header = () => {
+interface HeaderProps {
+  onMenuToggle: () => void;
+}
+
+export const Header = ({ onMenuToggle }: HeaderProps) => {
   const { user } = useAuth();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -26,11 +30,13 @@ export const Header = () => {
     localStorage.setItem('theme', newTheme);
   };
 
-  // Get initial or first two letters of email
   const initial = user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U';
 
   return (
     <header className={styles.header}>
+      <button className={styles.menuBtn} onClick={onMenuToggle} aria-label="Abrir menu">
+        <Menu size={22} />
+      </button>
       <div className={styles.actions}>
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
           {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
