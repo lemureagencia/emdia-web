@@ -3,7 +3,7 @@
 Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
 Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 
-> Última atualização: 27/06/2026 (sessão 3).
+> Última atualização: 27/06/2026 (sessão 4).
 
 ---
 
@@ -78,7 +78,8 @@ mesma tabela `transactions`, diferenciado pela coluna **`status`**:
   - **Descrição**: dropdown com itens do Catálogo + campo de texto livre. Sem auto-save e sem exclusão aqui — gerenciamento exclusivo na página Catálogo.
 - **Catálogo**: página dedicada (`/catalog`) para gerenciar **descrições padrão** (produtos, serviços, tipos de pendência). CRUD completo: adicionar, editar inline (Enter salva / Esc cancela), excluir. Alimenta o dropdown de Descrição em Pendências e o agente do WhatsApp.
 - **Metas**: progresso (quanto falta / quanto chegou / %). Tem **Editar** ✏️.
-- **Conectar Agente**: o cliente cadastra o **número de WhatsApp** dele (é assim que o agente o identifica).
+- **Conectar Agente**: gerencia os números de WhatsApp do usuário. Badge do plano (Mensal/Semestral/Anual/Admin), lista de números com remoção, contador de slots, botão "Adicionar" bloqueado ao atingir limite.
+- **Tela de Ativação** (`PlanActivation`): exibida automaticamente quando `plan = null`. Mostra os 3 planos com preços e links do Kiwify. Botão "Já comprei — verificar ativação" atualiza sem precisar sair.
 
 ### Saldo em conta (manual)
 O "Saldo na Conta" é digitado pelo usuário (campo em Transações) e guardado em `profiles.current_balance`.
@@ -92,7 +93,7 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - **Segurança**: RLS ativo — cada usuário só vê os próprios dados.
 
 ### Tabelas
-- **profiles**: `id`, `full_name`, `phone` (WhatsApp legado), `current_balance` (saldo manual), `plan` (`mensal`/`semestral`/`anual`, default `mensal`).
+- **profiles**: `id`, `full_name`, `phone` (WhatsApp legado), `current_balance` (saldo manual), `plan` (`mensal`/`semestral`/`anual`, **default `null`** — sem plano até comprar), `plan_expires_at` (data de expiração), `is_admin` (boolean, acesso total sem bloqueio).
 - **transactions**: `type` (income/expense), `status` (paid/pending), `amount`, `description` (= Descrição),
   `category` (= **Nome** do cliente), `service_type` (tipo de serviço/produto, opcional), `due_date`, `paid_date`, `payment_method` (pix/card/cash),
   parcelas (`installments`, `installment_number`, `installment_group`), `goal_id`.
@@ -100,6 +101,7 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - **services**: `user_id`, `name` — categorias de serviço/produto criadas pelo usuário (usado no campo `service_type`).
 - **descriptions**: `user_id`, `text` — catálogo de descrições padrão do usuário (gerenciado pela página Catálogo; aparece no dropdown de Pendências e é consultado pelo agente).
 - **user_phones**: `user_id`, `phone` — múltiplos números de WhatsApp por usuário. Limite pelo plano: mensal=1, semestral=2, anual=4. Gerenciado pela página Conectar Agente.
+- **pending_plans**: `email`, `plan`, `expires_at` — plano aguardando o usuário criar conta. Preenchido pelo webhook do Kiwify quando o email não existe ainda. Limpo automaticamente ao criar conta (trigger).
 - **agent_messages**: memória curta da conversa do agente (`phone_norm`, `role`, `content`, `created_at`).
 
 ### Funções (RPC) usadas pelo agente (executadas só com a service_role)
@@ -113,13 +115,16 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - `agent_set_balance_by_phone(phone, valor)` → define o saldo.
 - `agent_log_message(phone, role, content)` / `agent_recent_messages(phone, limit)` → memória da conversa.
 - `canon_phone(p)` → normaliza telefone BR (casa número **com ou sem** o 9).
+- `set_plan_by_email(email, plan, expires_at)` → atualiza `profiles.plan` pelo email. Se o usuário não existe ainda, salva em `pending_plans`. Chamada pelo webhook do Kiwify.
+- `apply_pending_plan()` → **trigger** em `profiles` (INSERT): ao criar conta, verifica `pending_plans` pelo email e aplica o plano automaticamente, depois limpa o registro.
 
 ### Scripts SQL (na raiz do projeto)
 `schema.sql`, `agent_setup.sql`, `agent_actions.sql`, `canon_phone.sql`, `fix_summary_month.sql`,
 `entradas_mes.sql` (received_month/paid_month), `agent_memory.sql` (tabela + RPCs de memória),
 `services_setup.sql` (tabela services + RLS), `descriptions_setup.sql` (tabela descriptions + RLS),
 `catalog_setup.sql` (UPDATE policy em descriptions + RPC `get_descriptions_by_phone`),
-`plans_setup.sql` (planos + tabela `user_phones` + RLS + migração + RPCs atualizados).
+`plans_setup.sql` (planos + tabela `user_phones` + RLS + migração + RPCs atualizados),
+`kiwify_setup.sql` (tabela `pending_plans` + função `set_plan_by_email` + trigger `apply_pending_plan`).
 
 ---
 
@@ -141,8 +146,9 @@ Cliente manda no WhatsApp
 ### Componentes
 - **Transporte WhatsApp**: **Zernio** (oficial, coexistência). `TRANSPORT=zernio`. (Evolution API é legado/desligado.)
 - **IA**: **Groq** (`llama-3.3-70b-versatile`).
-- **Arquivos**: `main.py` (webhook), `zernio.py` (envio/recebimento), `handler.py` (lógica/respostas),
-  `llm.py` (interpretação + modo inteligente), `emdia.py` (RPC Supabase), `config.py`, `installments.py`.
+- **Arquivos**: `main.py` (webhook WhatsApp + rota Kiwify), `zernio.py` (envio/recebimento), `handler.py` (lógica/respostas),
+  `llm.py` (interpretação + modo inteligente), `emdia.py` (RPC Supabase), `config.py`, `installments.py`,
+  `kiwify.py` (webhook Kiwify → atualiza plano no banco).
 - **`_fix_spacing()`** em `handler.py`: pós-processamento que colapsa 2+ linhas em branco para exatamente 1 em todas as respostas.
 - **Hospedagem**: **VPS via Easypanel** (Docker).
   - URL: `https://evolution-emdia-agent.iyrj6w.easypanel.host`
@@ -231,6 +237,40 @@ Cliente manda no WhatsApp
 
 ## 10. Histórico de mudanças recentes
 
+### Sessão 4 — 27/06/2026
+
+#### Integração Kiwify + Bloqueio por plano
+
+**Kiwify:**
+- Produto **"Emdia"** (`85e280f0-...`) com 3 assinaturas: Mensal (R$19,90/mês), Semestral (R$97,00), Anual (R$120,00).
+- Webhook registrado no Kiwify: `"EmDia - Ativa plano"` → ouve `compra_aprovada`, `subscription_renewed`, `subscription_canceled`, `compra_reembolsada`.
+- URL do webhook: `https://evolution-emdia-agent.iyrj6w.easypanel.host/webhook/kiwify?token=<ver credenciais.md>`.
+
+**Agente Python (`emdia-agent`):**
+- `kiwify.py`: processa o payload do Kiwify, mapeia plano pelo ID ou nome da assinatura, chama `set_plan_by_email`.
+- `main.py`: nova rota `POST /webhook/kiwify` com verificação de token por query param.
+- `config.py`: variável `KIWIFY_WEBHOOK_TOKEN` (definida no Easypanel).
+
+**Banco (rodado via Management API):**
+- `profiles.plan_expires_at` adicionado.
+- `profiles.is_admin` adicionado; `contatodejefferson@gmail.com` marcado como admin.
+- `profiles.plan` default removido → novos cadastros começam com `plan = null`.
+- Tabela `pending_plans`: guarda plano para emails sem conta ainda.
+- Função `set_plan_by_email`: atualiza plano ou salva em `pending_plans` se usuário não existe.
+- Trigger `apply_pending_plan` em `profiles` INSERT: aplica e remove o plano pendente automaticamente ao criar conta.
+
+**App web:**
+- `AuthContext`: expõe `profile` (plan + is_admin) e `refreshProfile()`. Aguarda perfil carregar antes de liberar o layout (sem flash de conteúdo).
+- `DashboardLayout`: redireciona para `PlanActivation` quando `plan = null` e não é admin.
+- `PlanActivation`: tela com cards dos 3 planos, preços, links Kiwify e botão "Já comprei — verificar ativação".
+
+**Fluxos suportados:**
+1. Cria conta → compra: webhook ativa plano na hora.
+2. Compra → cria conta: plano fica em `pending_plans`, trigger aplica no cadastro.
+3. Admin (`is_admin=true`): nunca bloqueado, sem limite de números.
+
+---
+
 ### Sessão 3 — 27/06/2026
 
 #### Planos e múltiplos números de WhatsApp
@@ -282,10 +322,12 @@ Cliente manda no WhatsApp
 ---
 
 ## 9. Próximos passos / ideias
+- Exibir aviso de plano próximo do vencimento (checar `plan_expires_at` no painel).
+- Painel admin para visualizar todos os clientes, planos e status (só para `is_admin=true`).
 - Editar registros pelo agente do WhatsApp (ex.: *"muda o valor da Nicole pra 1500"*).
 - Agente capturar forma de pagamento/meta também.
 - Mensagens de áudio no WhatsApp (transcrição) para o agente.
 - Gráficos do Painel com dados reais por mês.
 - Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
-- **Rotacionar as chaves** desta seção (boa prática de segurança).
+- **Rotacionar as chaves** periodicamente (boa prática de segurança).
 - Atualizar `agent_setup.sql` e `agent_actions.sql` no repo do agent com as novas colunas.
