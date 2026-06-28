@@ -94,8 +94,10 @@ export const Dashboard = () => {
   const currentOrOverdue = (p: PendingRow) => !p.due_date || p.due_date <= eomStr;
   const expectedIncome = pending.filter((p) => p.type === 'income' && currentOrOverdue(p)).reduce((s, p) => s + Number(p.amount), 0);
   const toPay = pending.filter((p) => p.type === 'expense' && currentOrOverdue(p)).reduce((s, p) => s + Number(p.amount), 0);
-  const overdue = pending.filter((p) => p.due_date && p.due_date < todayStr);
-  const overdueTotal = overdue.reduce((s, p) => s + Number(p.amount), 0);
+  const overdueIncome = pending.filter((p) => p.type === 'income' && p.due_date && p.due_date < todayStr);
+  const overdueExpense = pending.filter((p) => p.type === 'expense' && p.due_date && p.due_date < todayStr);
+  const overdueIncomeTotal = overdueIncome.reduce((s, p) => s + Number(p.amount), 0);
+  const overdueExpenseTotal = overdueExpense.reduce((s, p) => s + Number(p.amount), 0);
 
   // Saldo na Conta = valor informado manualmente ("quanto tenho em conta hoje")
   const totalBalance = accountBalance;
@@ -167,10 +169,19 @@ export const Dashboard = () => {
         <Card>
           <CardContent className={styles.summaryCard}>
             <div className={styles.summaryTitle}>
-              <AlertTriangle size={16} className={styles.warning} /> Vencidos
+              <AlertTriangle size={16} className={styles.warning} /> Vencidos a Receber
             </div>
-            <div className={styles.summaryValue}>{formatCurrency(overdueTotal)}</div>
-            <div className="text-xs text-muted">{overdue.length} em atraso</div>
+            <div className={clsx(styles.summaryValue, styles.warning)}>{formatCurrency(overdueIncomeTotal)}</div>
+            <div className="text-xs text-muted">{overdueIncome.length} pendência(s) em atraso</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className={styles.summaryCard}>
+            <div className={styles.summaryTitle}>
+              <AlertTriangle size={16} className={styles.danger} /> Vencidos a Pagar
+            </div>
+            <div className={clsx(styles.summaryValue, styles.danger)}>{formatCurrency(overdueExpenseTotal)}</div>
+            <div className="text-xs text-muted">{overdueExpense.length} pendência(s) em atraso</div>
           </CardContent>
         </Card>
       </div>
