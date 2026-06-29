@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, AlertTriangle } from 'lucide-react';
-import { format, endOfMonth } from 'date-fns';
+import { format, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -18,16 +18,6 @@ interface Transaction {
   created_at: string;
 }
 
-const mockChartData = [
-  { name: 'Jan', income: 4000, expense: 2400 },
-  { name: 'Fev', income: 3000, expense: 1398 },
-  { name: 'Mar', income: 2000, expense: 9800 },
-  { name: 'Abr', income: 2780, expense: 3908 },
-  { name: 'Mai', income: 1890, expense: 4800 },
-  { name: 'Jun', income: 2390, expense: 3800 },
-  { name: 'Jul', income: 3490, expense: 4300 },
-];
-
 interface PendingRow {
   type: 'income' | 'expense';
   amount: number;
@@ -38,7 +28,31 @@ interface PendingRow {
 interface PaidRow {
   type: 'income' | 'expense';
   amount: number;
+  paid_date: string | null;
+  created_at: string;
 }
+
+interface MonthlyData {
+  name: string;
+  income: number;
+  expense: number;
+}
+
+// Agrega os lançamentos pagos nos últimos 7 meses (mês atual incluso) para os gráficos.
+const buildMonthlyChartData = (paid: PaidRow[]): MonthlyData[] => {
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = subMonths(today, 6 - i);
+    const monthKey = format(d, 'yyyy-MM');
+    const label = format(d, 'MMM', { locale: ptBR });
+    const ofMonth = paid.filter((p) => (p.paid_date ?? p.created_at ?? '').slice(0, 7) === monthKey);
+    return {
+      name: label.charAt(0).toUpperCase() + label.slice(1),
+      income: ofMonth.filter((p) => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0),
+      expense: ofMonth.filter((p) => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0),
+    };
+  });
+};
 
 export const Dashboard = () => {
   const { user } = useAuth();
@@ -66,7 +80,7 @@ export const Dashboard = () => {
           .eq('status', 'pending'),
         supabase
           .from('transactions')
-          .select('type, amount')
+          .select('type, amount, paid_date, created_at')
           .eq('user_id', user.id)
           .eq('status', 'paid'),
         supabase
@@ -104,6 +118,7 @@ export const Dashboard = () => {
   // Receitas / Despesas = totais reais dos lançamentos pagos
   const totalIncome = paid.filter((p) => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
   const totalExpense = paid.filter((p) => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
+  const chartData = buildMonthlyChartData(paid);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -194,7 +209,7 @@ export const Dashboard = () => {
           <CardContent>
             <div style={{ height: 250 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="var(--color-success)" stopOpacity={0.3}/>
@@ -226,7 +241,7 @@ export const Dashboard = () => {
           <CardContent>
             <div style={{ height: 250 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockChartData.slice(-1)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <BarChart data={chartData.slice(-1)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                   <XAxis dataKey="name" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip cursor={{fill: 'var(--color-surface-hover)'}} contentStyle={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }} />

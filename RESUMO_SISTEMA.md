@@ -3,7 +3,7 @@
 Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
 Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 
-> Última atualização: 27/06/2026 (sessão 4).
+> Última atualização: 29/06/2026 (sessão 5).
 
 ---
 
@@ -237,6 +237,40 @@ Cliente manda no WhatsApp
 
 ## 10. Histórico de mudanças recentes
 
+### Sessão 5 — 29/06/2026
+
+#### Painel: Vencidos separados por tipo
+- Card único "Vencidos" substituído por dois cards: **Vencidos a Receber** (amarelo) e **Vencidos a Pagar** (vermelho).
+- Cálculo em `Dashboard.tsx`: `overdueIncome` (type=income) e `overdueExpense` (type=expense) separados.
+
+#### Agente: Transcrição de áudio via Groq Whisper
+- Usuário pode enviar **mensagem de áudio** no WhatsApp; o agente transcreve e responde normalmente.
+- **Fluxo**: Zernio envia webhook com `message.attachments[{type:"audio", url:...}]` → agente baixa o arquivo com auth Bearer → Groq `whisper-large-v3` transcreve em pt-BR → texto vai para o handler normal.
+- **Sem nova chave de API**: usa a mesma `LLM_API_KEY` do Groq já configurada no Easypanel.
+- **Dedup antes da transcrição**: evita chamar o Whisper duas vezes quando o Zernio reenvia o webhook.
+- **Arquivos novos/alterados no `emdia-agent`**:
+  - `transcribe.py` *(novo)*: baixa áudio e chama `openai.audio.transcriptions.create()` apontando para `api.groq.com`.
+  - `zernio.py`: `parse_webhook` agora retorna 5 valores `(phone, text, msg_id, conv, audio_url)`; detecta áudio em `msg.attachments`; expõe `get_download_headers()` com Bearer token.
+  - `main.py`: dedup por `msg_id` antes de transcrever; chama `transcribe.transcribe_audio(url, headers)` quando `audio_url` presente.
+  - `config.py`: `GROQ_API_KEY` com fallback automático para `LLM_API_KEY` quando `LLM_PROVIDER=groq`.
+  - `evolution.py`: `parse_webhook` ajustado para retornar 5 valores (compatibilidade).
+
+#### App Web: Layout responsivo mobile
+- **Sidebar drawer**: em telas `≤768px` a sidebar some e aparece deslizando pela esquerda ao tocar no ☰. Overlay escuro ao fundo. Fecha ao navegar ou tocar fora.
+- **Hamburguer (☰)**: adicionado no `Header` — visível só em mobile (`display:none` em desktop).
+- **Grids**: `minmax` reduzido de 220-240px → 160px nos cards de resumo (Painel e Pendências), permitindo 2 colunas em smartphones. Metas: 300px → 260px.
+- **Tabelas**: padding de células reduzido em `≤640px` (`spacing-2/3` em vez de `spacing-3/4`).
+- **Content padding**: reduzido de `spacing-6` → `spacing-4` em mobile.
+- **Transações**: `balanceBar` empilha verticalmente em mobile; `balanceInput` passa para 100% de largura.
+- **Arquivos alterados**: `DashboardLayout.tsx/.css`, `Header.tsx/.css`, `Sidebar.tsx/.css`, `Dashboard.module.css`, `Pending.module.css`, `Goals.module.css`, `Transactions.module.css`.
+
+#### Escalabilidade: análise para MVP
+- Arquitetura atual suporta confortavelmente **até ~150 usuários** sem alterações.
+- Limitante real: plano grátis do Groq (30 req/min LLM, 20 req/min Whisper). Plano pago (~$10-20/mês) eleva o teto para 300-400 usuários.
+- `requests` síncrono no agente: baixo impacto para uso típico de app financeiro (5-20 msgs/dia/usuário); prioridade quando ultrapassar 400 usuários.
+
+---
+
 ### Sessão 4 — 27/06/2026
 
 #### Integração Kiwify + Bloqueio por plano
@@ -326,8 +360,10 @@ Cliente manda no WhatsApp
 - Painel admin para visualizar todos os clientes, planos e status (só para `is_admin=true`).
 - Editar registros pelo agente do WhatsApp (ex.: *"muda o valor da Nicole pra 1500"*).
 - Agente capturar forma de pagamento/meta também.
-- Mensagens de áudio no WhatsApp (transcrição) para o agente.
+- ~~Mensagens de áudio no WhatsApp (transcrição) para o agente.~~ ✅ Feito na sessão 5.
+- ~~Editar registros pelo WhatsApp.~~ ✅ Feito na sessão 6.
 - Gráficos do Painel com dados reais por mês.
+- Aviso de plano próximo do vencimento no app web.
 - Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
 - **Rotacionar as chaves** periodicamente (boa prática de segurança).
 - Atualizar `agent_setup.sql` e `agent_actions.sql` no repo do agent com as novas colunas.
