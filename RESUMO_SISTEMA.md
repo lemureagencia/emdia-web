@@ -362,8 +362,9 @@ Cliente manda no WhatsApp
 - Agente capturar forma de pagamento/meta também.
 - ~~Mensagens de áudio no WhatsApp (transcrição) para o agente.~~ ✅ Feito na sessão 5.
 - ~~Editar registros pelo WhatsApp.~~ ✅ Feito na sessão 6.
-- Gráficos do Painel com dados reais por mês.
-- Aviso de plano próximo do vencimento no app web.
+- ~~Gráficos do Painel com dados reais por mês.~~ ✅ Feito na sessão 6.
+- ~~Aviso de plano próximo do vencimento no app web.~~ ✅ Feito na sessão 6.
+- ~~Confirmação antes de excluir/editar/marcar pago + ponte de quitação (anti-duplicação).~~ ✅ Feito na sessão 6.
 - Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
 - **Rotacionar as chaves** periodicamente (boa prática de segurança).
 - Atualizar `agent_setup.sql` e `agent_actions.sql` no repo do agent com as novas colunas.
