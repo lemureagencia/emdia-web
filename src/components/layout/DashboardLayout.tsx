@@ -31,7 +31,7 @@ export const DashboardLayout = () => {
     !bannerDismissed &&
     daysUntilExpiry !== null &&
     daysUntilExpiry >= 0 &&
-    daysUntilExpiry <= 7;
+    daysUntilExpiry <= 2;
 
   if (isLoading) {
     return (
@@ -50,7 +50,6 @@ export const DashboardLayout = () => {
   }
 
   const renewLink = PLAN_LINKS[profile?.plan ?? 'mensal'];
-  const bannerUrgent = (daysUntilExpiry ?? 8) <= 2;
 
   return (
     <div className={styles.layout}>
@@ -61,7 +60,7 @@ export const DashboardLayout = () => {
       <div className={styles.main}>
         <Header onMenuToggle={() => setSidebarOpen(o => !o)} />
         {showBanner && (
-          <div className={bannerUrgent ? styles.bannerDanger : styles.bannerWarning}>
+          <div className={styles.bannerDanger}>
             <AlertTriangle size={15} />
             <span>
               {daysUntilExpiry === 0
