@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 
 interface Profile {
   plan: string | null;
+  plan_expires_at: string | null;
   is_admin: boolean;
 }
 
@@ -34,10 +35,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const loadProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
-      .select('plan, is_admin')
+      .select('plan, plan_expires_at, is_admin')
       .eq('id', userId)
       .single();
-    setProfile(data ? { plan: data.plan ?? null, is_admin: !!data.is_admin } : null);
+    setProfile(data ? {
+      plan: data.plan ?? null,
+      plan_expires_at: data.plan_expires_at ?? null,
+      is_admin: !!data.is_admin,
+    } : null);
   }, []);
 
   const refreshProfile = useCallback(async () => {
