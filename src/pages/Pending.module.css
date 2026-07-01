@@ -51,6 +51,112 @@
 .danger { color: var(--color-danger); }
 .warning { color: var(--color-warning); }
 
+/* ---- Abas interativas (A receber / A pagar / Vencidos) ---- */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-5);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  text-align: left;
+}
+
+.tab:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-text-muted);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.06));
+}
+
+.tabIcon { flex-shrink: 0; }
+
+.tabLabel {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.tabSub {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.tabCount {
+  margin-left: auto;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 var(--spacing-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-hover, #eee);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* Aba ativa: destaque colorido conforme o tipo */
+.tabActive { color: var(--color-text); }
+.tabActive .tabIcon,
+.tabActive .tabSub { color: inherit; }
+
+.tabIncome.tabActive {
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
+}
+.tabIncome.tabActive .tabIcon { color: var(--color-success); }
+.tabIncome.tabActive .tabCount { background: var(--color-success); color: #fff; }
+
+.tabExpense.tabActive {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+.tabExpense.tabActive .tabIcon { color: var(--color-danger); }
+.tabExpense.tabActive .tabCount { background: var(--color-danger); color: #fff; }
+
+.tabOverdue.tabActive {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.tabOverdue.tabActive .tabIcon { color: var(--color-warning); }
+.tabOverdue.tabActive .tabCount { background: var(--color-warning); color: #fff; }
+
+@media (max-width: 640px) {
+  .tabs {
+    gap: var(--spacing-2);
+  }
+  .tab {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-3) var(--spacing-1);
+  }
+  .tabCount {
+    margin-left: 0;
+    min-width: 22px;
+    height: 22px;
+    font-size: 0.72rem;
+  }
+  .tabSub { display: none; }
+}
+
 .tableContainer {
   overflow-x: auto;
 }

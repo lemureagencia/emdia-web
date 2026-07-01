@@ -53,7 +53,7 @@ export const Pending = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'overdue'>('all');
+  const [filter, setFilter] = useState<'income' | 'expense' | 'overdue'>('income');
   const [descriptions, setDescriptions] = useState<Description[]>([]);
   const [formData, setFormData] = useState({
     type: 'income' as 'income' | 'expense',
@@ -272,9 +272,12 @@ export const Pending = () => {
   const visibleRows = displayRows.filter((r) =>
     filter === 'income' ? r.next.type === 'income'
     : filter === 'expense' ? r.next.type === 'expense'
-    : filter === 'overdue' ? isOverdue(r.next)
-    : true
+    : isOverdue(r.next)
   );
+
+  // Contadores por aba (badge)
+  const incomeCount = displayRows.filter((r) => r.next.type === 'income').length;
+  const expenseCount = displayRows.filter((r) => r.next.type === 'expense').length;
 
   return (
     <div>
@@ -318,21 +321,26 @@ export const Pending = () => {
         </Card>
       </div>
 
-      <div style={{ display: 'flex', gap: 'var(--spacing-2)', marginBottom: 'var(--spacing-4)', flexWrap: 'wrap' }}>
+      <div className={styles.tabs} role="tablist">
         {([
-          ['all', 'Todos'],
-          ['income', 'A receber (clientes)'],
-          ['expense', 'A pagar (contas)'],
-          ['overdue', 'Vencidos'],
-        ] as const).map(([key, label]) => (
-          <Button
+          ['income', 'A receber', 'clientes', TrendingUp, incomeCount, styles.tabIncome],
+          ['expense', 'A pagar', 'contas', Wallet, expenseCount, styles.tabExpense],
+          ['overdue', 'Vencidos', 'em atraso', AlertTriangle, overdueItems.length, styles.tabOverdue],
+        ] as const).map(([key, label, sub, Icon, count, colorClass]) => (
+          <button
             key={key}
-            size="sm"
-            variant={filter === key ? 'primary' : 'ghost'}
+            role="tab"
+            aria-selected={filter === key}
+            className={clsx(styles.tab, filter === key && styles.tabActive, filter === key && colorClass)}
             onClick={() => setFilter(key)}
           >
-            {label}
-          </Button>
+            <Icon size={18} className={styles.tabIcon} />
+            <span className={styles.tabLabel}>
+              {label}
+              <span className={styles.tabSub}>{sub}</span>
+            </span>
+            <span className={styles.tabCount}>{count}</span>
+          </button>
         ))}
       </div>
 
