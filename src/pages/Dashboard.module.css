@@ -63,6 +63,95 @@
 .danger { color: var(--color-danger); }
 .warning { color: var(--color-warning); }
 
+/* ---- Controle de gastos ---- */
+.budgetCard {
+  margin-bottom: var(--spacing-6);
+}
+
+.budgetHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-3);
+}
+
+.budgetEditBtn {
+  background: none;
+  border: none;
+  color: var(--color-primary, #6366f1);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.budgetEditBtn:hover { text-decoration: underline; }
+
+.budgetEmpty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  align-items: flex-start;
+}
+
+.budgetForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.budgetInputWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0 var(--spacing-3);
+  background: var(--color-background);
+}
+
+.budgetInputWrap span { color: var(--color-text-muted); font-size: 0.875rem; }
+
+.budgetInputWrap input {
+  border: none;
+  background: transparent;
+  padding: var(--spacing-2) 0;
+  width: 110px;
+  color: var(--color-text);
+  font-size: 1rem;
+  outline: none;
+}
+
+.budgetNumbers {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-2);
+}
+
+.budgetBarTrack {
+  width: 100%;
+  height: 10px;
+  background: var(--color-surface-hover, #eee);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.budgetBarFill {
+  height: 100%;
+  background: var(--color-success);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.budgetBarWarn { background: var(--color-warning); }
+.budgetBarOver { background: var(--color-danger); }
+
+.budgetFooter {
+  margin-top: var(--spacing-2);
+  font-size: 0.875rem;
+}
+
 .chartsGrid {
   display: grid;
   grid-template-columns: 2fr 1fr;

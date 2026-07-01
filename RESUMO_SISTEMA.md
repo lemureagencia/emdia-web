@@ -365,6 +365,7 @@ Cliente manda no WhatsApp
 - ~~Gráficos do Painel com dados reais por mês.~~ ✅ Feito na sessão 6.
 - ~~Aviso de plano próximo do vencimento no app web.~~ ✅ Feito na sessão 6.
 - ~~Confirmação antes de excluir/editar/marcar pago + ponte de quitação (anti-duplicação).~~ ✅ Feito na sessão 6.
+- ~~Controle de gastos mensal (orçamento) no agente e no Painel.~~ ✅ Feito na sessão 6.
 - Avaliar mover o agente para serverless (Vercel) e aposentar a VPS.
 - **Rotacionar as chaves** periodicamente (boa prática de segurança).
 - Atualizar `agent_setup.sql` e `agent_actions.sql` no repo do agent com as novas colunas.

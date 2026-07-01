@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, AlertTriangle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, AlertTriangle, Target } from 'lucide-react';
 import { format, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import styles from './Dashboard.module.css';
@@ -60,6 +61,10 @@ export const Dashboard = () => {
   const [pending, setPending] = useState<PendingRow[]>([]);
   const [paid, setPaid] = useState<PaidRow[]>([]);
   const [accountBalance, setAccountBalance] = useState(0);
+  const [monthlyBudget, setMonthlyBudget] = useState<number | null>(null);
+  const [budgetInput, setBudgetInput] = useState('');
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [savingBudget, setSavingBudget] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -85,7 +90,7 @@ export const Dashboard = () => {
           .eq('status', 'paid'),
         supabase
           .from('profiles')
-          .select('current_balance')
+          .select('current_balance, monthly_budget')
           .eq('id', user.id)
           .single(),
       ]);
@@ -93,14 +98,27 @@ export const Dashboard = () => {
       if (!recent.error && recent.data) setTransactions(recent.data);
       if (!pendingRes.error && pendingRes.data) setPending(pendingRes.data);
       if (!paidRes.error && paidRes.data) setPaid(paidRes.data);
-      if (!profileRes.error && profileRes.data?.current_balance != null) {
-        setAccountBalance(Number(profileRes.data.current_balance));
+      if (!profileRes.error && profileRes.data) {
+        if (profileRes.data.current_balance != null) setAccountBalance(Number(profileRes.data.current_balance));
+        setMonthlyBudget(profileRes.data.monthly_budget != null ? Number(profileRes.data.monthly_budget) : null);
       }
       setIsLoading(false);
     };
 
     fetchDashboardData();
   }, [user]);
+
+  const saveBudget = async (value: number | null) => {
+    if (!user) return;
+    setSavingBudget(true);
+    const { error } = await supabase.from('profiles').update({ monthly_budget: value }).eq('id', user.id);
+    if (!error) {
+      setMonthlyBudget(value);
+      setEditingBudget(false);
+      setBudgetInput('');
+    }
+    setSavingBudget(false);
+  };
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const eomStr = format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -119,6 +137,15 @@ export const Dashboard = () => {
   const totalIncome = paid.filter((p) => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
   const totalExpense = paid.filter((p) => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
   const chartData = buildMonthlyChartData(paid);
+
+  // Controle de gastos = saídas pagas do mês atual vs teto definido
+  const monthKey = format(new Date(), 'yyyy-MM');
+  const spentThisMonth = paid
+    .filter((p) => p.type === 'expense' && (p.paid_date ?? p.created_at ?? '').slice(0, 7) === monthKey)
+    .reduce((s, p) => s + Number(p.amount), 0);
+  const budgetPct = monthlyBudget && monthlyBudget > 0 ? Math.min(100, Math.round((spentThisMonth / monthlyBudget) * 100)) : 0;
+  const budgetOver = monthlyBudget != null && spentThisMonth > monthlyBudget;
+  const budgetRemaining = (monthlyBudget ?? 0) - spentThisMonth;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -157,6 +184,68 @@ export const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Card className={styles.budgetCard}>
+        <CardContent>
+          <div className={styles.budgetHeader}>
+            <div className={styles.summaryTitle}>
+              <Target size={16} /> Controle de Gastos do mês
+            </div>
+            {monthlyBudget != null && !editingBudget && (
+              <button className={styles.budgetEditBtn} onClick={() => { setBudgetInput(String(monthlyBudget)); setEditingBudget(true); }}>
+                Editar
+              </button>
+            )}
+          </div>
+
+          {monthlyBudget == null && !editingBudget && (
+            <div className={styles.budgetEmpty}>
+              <p className="text-sm text-muted">Defina um teto de gastos para acompanhar quanto já gastou no mês.</p>
+              <Button variant="outline" onClick={() => { setBudgetInput(''); setEditingBudget(true); }}>Definir controle</Button>
+            </div>
+          )}
+
+          {editingBudget && (
+            <div className={styles.budgetForm}>
+              <div className={styles.budgetInputWrap}>
+                <span>R$</span>
+                <input
+                  type="number" inputMode="decimal" placeholder="3000" autoFocus
+                  value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveBudget(Number(budgetInput) || 0); if (e.key === 'Escape') setEditingBudget(false); }}
+                />
+              </div>
+              <Button onClick={() => saveBudget(Number(budgetInput) || 0)} isLoading={savingBudget} disabled={!budgetInput}>Salvar</Button>
+              <Button variant="ghost" onClick={() => setEditingBudget(false)}>Cancelar</Button>
+              {monthlyBudget != null && (
+                <Button variant="ghost" onClick={() => saveBudget(null)}>Remover</Button>
+              )}
+            </div>
+          )}
+
+          {monthlyBudget != null && !editingBudget && (
+            <>
+              <div className={styles.budgetNumbers}>
+                <span className={clsx(budgetOver && styles.danger)}>{formatCurrency(spentThisMonth)}</span>
+                <span className="text-muted"> de {formatCurrency(monthlyBudget)}</span>
+              </div>
+              <div className={styles.budgetBarTrack}>
+                <div
+                  className={clsx(styles.budgetBarFill, budgetOver ? styles.budgetBarOver : budgetPct >= 80 && styles.budgetBarWarn)}
+                  style={{ width: `${budgetPct}%` }}
+                />
+              </div>
+              <div className={styles.budgetFooter}>
+                {budgetOver ? (
+                  <span className={styles.danger}>⚠️ Você passou {formatCurrency(spentThisMonth - monthlyBudget)} do limite.</span>
+                ) : (
+                  <span className="text-muted">Resta {formatCurrency(budgetRemaining)} ({budgetPct}% usado)</span>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <div className={styles.header} style={{ marginBottom: 'var(--spacing-4)' }}>
         <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>Pendências do mês</h2>
