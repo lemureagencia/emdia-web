@@ -53,7 +53,7 @@ export const Pending = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'income' | 'expense' | 'overdue'>('income');
+  const [filter, setFilter] = useState<'income' | 'expense' | 'overdue_income' | 'overdue_expense'>('income');
   const [descriptions, setDescriptions] = useState<Description[]>([]);
   const [formData, setFormData] = useState({
     type: 'income' as 'income' | 'expense',
@@ -267,12 +267,15 @@ export const Pending = () => {
   const toPay = cardRows.filter((r) => r.next.type === 'expense').reduce((s, r) => s + Number(r.next.amount), 0);
   const overdueItems = displayRows.filter((r) => isOverdue(r.next));
   const overdueTotal = overdueItems.reduce((s, r) => s + Number(r.next.amount), 0);
+  const overdueIncomeItems = overdueItems.filter((r) => r.next.type === 'income');
+  const overdueExpenseItems = overdueItems.filter((r) => r.next.type === 'expense');
 
-  // Filtro da aba: separa clientes (a receber) de contas (a pagar) e vencidos
+  // Filtro da aba: separa clientes (a receber) de contas (a pagar) e vencidos por lado
   const visibleRows = displayRows.filter((r) =>
     filter === 'income' ? r.next.type === 'income'
     : filter === 'expense' ? r.next.type === 'expense'
-    : isOverdue(r.next)
+    : filter === 'overdue_income' ? isOverdue(r.next) && r.next.type === 'income'
+    : isOverdue(r.next) && r.next.type === 'expense'
   );
 
   // Contadores por aba (badge)
@@ -325,7 +328,8 @@ export const Pending = () => {
         {([
           ['income', 'A receber', 'clientes', TrendingUp, incomeCount, styles.tabIncome],
           ['expense', 'A pagar', 'contas', Wallet, expenseCount, styles.tabExpense],
-          ['overdue', 'Vencidos', 'em atraso', AlertTriangle, overdueItems.length, styles.tabOverdue],
+          ['overdue_income', 'Vencidos a receber', 'clientes', AlertTriangle, overdueIncomeItems.length, styles.tabOverdue],
+          ['overdue_expense', 'Vencidos a pagar', 'contas', AlertTriangle, overdueExpenseItems.length, styles.tabOverdueExpense],
         ] as const).map(([key, label, sub, Icon, count, colorClass]) => (
           <button
             key={key}

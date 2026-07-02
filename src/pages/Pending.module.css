@@ -54,7 +54,7 @@
 /* ---- Abas interativas (A receber / A pagar / Vencidos) ---- */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: var(--spacing-3);
   margin-bottom: var(--spacing-5);
 }
@@ -136,6 +136,13 @@
 }
 .tabOverdue.tabActive .tabIcon { color: var(--color-warning); }
 .tabOverdue.tabActive .tabCount { background: var(--color-warning); color: #fff; }
+
+.tabOverdueExpense.tabActive {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+.tabOverdueExpense.tabActive .tabIcon { color: var(--color-danger); }
+.tabOverdueExpense.tabActive .tabCount { background: var(--color-danger); color: #fff; }
 
 @media (max-width: 640px) {
   .tabs {
