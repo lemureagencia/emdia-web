@@ -183,69 +183,67 @@ export const Dashboard = () => {
             <div className={styles.summaryValue}>{formatCurrency(totalExpense)}</div>
           </CardContent>
         </Card>
-      </div>
 
-      <Card className={styles.budgetCard}>
-        <CardContent>
-          <div className={styles.budgetHeader}>
+        <Card>
+          <CardContent className={styles.summaryCard}>
             <div className={styles.summaryTitle}>
-              <Target size={16} /> Controle de Gastos do mês
+              <Target size={16} /> Controle de Gastos
             </div>
-            {monthlyBudget != null && !editingBudget && (
-              <button className={styles.budgetEditBtn} onClick={() => { setBudgetInput(String(monthlyBudget)); setEditingBudget(true); }}>
-                Editar
-              </button>
+
+            {monthlyBudget == null && !editingBudget && (
+              <>
+                <div className={styles.summaryValue}>—</div>
+                <button className={styles.budgetEditBtn} onClick={() => { setBudgetInput(''); setEditingBudget(true); }}>
+                  Definir teto
+                </button>
+              </>
             )}
-          </div>
 
-          {monthlyBudget == null && !editingBudget && (
-            <div className={styles.budgetEmpty}>
-              <p className="text-sm text-muted">Defina um teto de gastos para acompanhar quanto já gastou no mês.</p>
-              <Button variant="outline" onClick={() => { setBudgetInput(''); setEditingBudget(true); }}>Definir controle</Button>
-            </div>
-          )}
+            {editingBudget && (
+              <div className={styles.budgetFormCompact}>
+                <div className={styles.budgetInputWrap}>
+                  <span>R$</span>
+                  <input
+                    type="number" inputMode="decimal" placeholder="3000" autoFocus
+                    value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveBudget(Number(budgetInput) || 0); if (e.key === 'Escape') setEditingBudget(false); }}
+                  />
+                </div>
+                <div className={styles.budgetFormActions}>
+                  <Button size="sm" onClick={() => saveBudget(Number(budgetInput) || 0)} isLoading={savingBudget} disabled={!budgetInput}>Salvar</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingBudget(false)}>Cancelar</Button>
+                  {monthlyBudget != null && (
+                    <Button size="sm" variant="ghost" onClick={() => saveBudget(null)}>Remover</Button>
+                  )}
+                </div>
+              </div>
+            )}
 
-          {editingBudget && (
-            <div className={styles.budgetForm}>
-              <div className={styles.budgetInputWrap}>
-                <span>R$</span>
-                <input
-                  type="number" inputMode="decimal" placeholder="3000" autoFocus
-                  value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') saveBudget(Number(budgetInput) || 0); if (e.key === 'Escape') setEditingBudget(false); }}
-                />
-              </div>
-              <Button onClick={() => saveBudget(Number(budgetInput) || 0)} isLoading={savingBudget} disabled={!budgetInput}>Salvar</Button>
-              <Button variant="ghost" onClick={() => setEditingBudget(false)}>Cancelar</Button>
-              {monthlyBudget != null && (
-                <Button variant="ghost" onClick={() => saveBudget(null)}>Remover</Button>
-              )}
-            </div>
-          )}
-
-          {monthlyBudget != null && !editingBudget && (
-            <>
-              <div className={styles.budgetNumbers}>
-                <span className={clsx(budgetOver && styles.danger)}>{formatCurrency(spentThisMonth)}</span>
-                <span className="text-muted"> de {formatCurrency(monthlyBudget)}</span>
-              </div>
-              <div className={styles.budgetBarTrack}>
-                <div
-                  className={clsx(styles.budgetBarFill, budgetOver ? styles.budgetBarOver : budgetPct >= 80 && styles.budgetBarWarn)}
-                  style={{ width: `${budgetPct}%` }}
-                />
-              </div>
-              <div className={styles.budgetFooter}>
-                {budgetOver ? (
-                  <span className={styles.danger}>⚠️ Você passou {formatCurrency(spentThisMonth - monthlyBudget)} do limite.</span>
-                ) : (
-                  <span className="text-muted">Resta {formatCurrency(budgetRemaining)} ({budgetPct}% usado)</span>
-                )}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            {monthlyBudget != null && !editingBudget && (
+              <>
+                <div className={styles.summaryValue}>
+                  <span className={clsx(budgetOver && styles.danger)}>{formatCurrency(spentThisMonth)}</span>
+                  <span className={styles.budgetOf}> / {formatCurrency(monthlyBudget)}</span>
+                </div>
+                <div className={styles.budgetBarTrack}>
+                  <div
+                    className={clsx(styles.budgetBarFill, budgetOver ? styles.budgetBarOver : budgetPct >= 80 && styles.budgetBarWarn)}
+                    style={{ width: `${budgetPct}%` }}
+                  />
+                </div>
+                <div className={styles.budgetHint}>
+                  {budgetOver
+                    ? <span className={styles.danger}>⚠️ {formatCurrency(spentThisMonth - monthlyBudget)} acima</span>
+                    : <span className="text-muted">Resta {formatCurrency(budgetRemaining)}</span>}
+                  <button className={styles.budgetEditInline} onClick={() => { setBudgetInput(String(monthlyBudget)); setEditingBudget(true); }}>
+                    editar
+                  </button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className={styles.header} style={{ marginBottom: 'var(--spacing-4)' }}>
         <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>Pendências do mês</h2>
