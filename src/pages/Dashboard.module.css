@@ -228,3 +228,60 @@
 .transactionAmount {
   font-weight: 600;
 }
+
+/* ---- Filtro de período (cabeçalho do Painel) ---- */
+.periodFilter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
+.periodSelect,
+.periodDates input {
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.periodDates {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: 0.875rem;
+}
+
+.summaryTag {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 1px var(--spacing-2);
+  border-radius: 999px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-3);
+  }
+  .periodFilter {
+    width: 100%;
+  }
+  .periodSelect {
+    flex: 1;
+  }
+  .periodDates {
+    width: 100%;
+  }
+  .periodDates input {
+    flex: 1;
+    min-width: 0;
+  }
+}

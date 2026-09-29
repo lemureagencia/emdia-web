@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowRightLeft, CalendarClock, Target, FileText, LogOut, Bot, BookOpen } from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, TrendingUp, TrendingDown, Target, FileText, LogOut, Bot, BookOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import styles from './Sidebar.module.css';
@@ -7,7 +7,8 @@ import styles from './Sidebar.module.css';
 const navItems = [
   { path: '/', label: 'Painel', icon: LayoutDashboard },
   { path: '/transactions', label: 'Transações', icon: ArrowRightLeft },
-  { path: '/pending', label: 'Pendências', icon: CalendarClock },
+  { path: '/receitas', label: 'Receitas', icon: TrendingUp },
+  { path: '/despesas', label: 'Despesas', icon: TrendingDown },
   { path: '/goals', label: 'Metas', icon: Target },
   { path: '/catalog', label: 'Catálogo', icon: BookOpen },
   { path: '/reports', label: 'Relatórios', icon: FileText },

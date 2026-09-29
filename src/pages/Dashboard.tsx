@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, AlertTriangle, Target } from 'lucide-react';
-import { format, endOfMonth, subMonths } from 'date-fns';
+import { format, endOfMonth, startOfMonth, subMonths, startOfYear, endOfYear, parseISO, differenceInCalendarMonths, eachMonthOfInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { ensureRecurringMonth } from '../lib/recurring';
 import styles from './Dashboard.module.css';
 
 interface Transaction {
@@ -16,8 +17,36 @@ interface Transaction {
   type: 'income' | 'expense';
   amount: number;
   description: string;
+  category: string | null;
+  status: 'paid' | 'pending';
+  paid_date: string | null;
+  due_date: string | null;
   created_at: string;
 }
+
+// Período do Painel: presets + intervalo personalizado (datas yyyy-MM-dd)
+type Preset = 'this_month' | 'last_month' | 'last_3' | 'this_year' | 'all' | 'custom';
+const PRESETS: { value: Preset; label: string }[] = [
+  { value: 'this_month', label: 'Este mês' },
+  { value: 'last_month', label: 'Mês passado' },
+  { value: 'last_3', label: 'Últimos 3 meses' },
+  { value: 'this_year', label: 'Este ano' },
+  { value: 'all', label: 'Tudo' },
+  { value: 'custom', label: 'Personalizado' },
+];
+
+const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
+
+const presetRange = (preset: Preset): { from: string; to: string } => {
+  const today = new Date();
+  switch (preset) {
+    case 'last_month': { const m = subMonths(today, 1); return { from: ymd(startOfMonth(m)), to: ymd(endOfMonth(m)) }; }
+    case 'last_3': return { from: ymd(startOfMonth(subMonths(today, 2))), to: ymd(endOfMonth(today)) };
+    case 'this_year': return { from: ymd(startOfYear(today)), to: ymd(endOfYear(today)) };
+    case 'all': return { from: '2000-01-01', to: ymd(endOfYear(today)) };
+    default: return { from: ymd(startOfMonth(today)), to: ymd(endOfMonth(today)) };
+  }
+};
 
 interface PendingRow {
   type: 'income' | 'expense';
@@ -39,14 +68,21 @@ interface MonthlyData {
   expense: number;
 }
 
-// Agrega os lançamentos pagos nos últimos 7 meses (mês atual incluso) para os gráficos.
-const buildMonthlyChartData = (paid: PaidRow[]): MonthlyData[] => {
-  const today = new Date();
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = subMonths(today, 6 - i);
+// Data efetiva de um lançamento pago (quando foi pago; fallback = criação)
+const paidOn = (p: PaidRow) => (p.paid_date ?? p.created_at ?? '').slice(0, 10);
+
+// Agrega os lançamentos pagos mês a mês dentro do período para os gráficos.
+// Período de 1 mês → mostra os 7 meses até ele (contexto); períodos maiores → só os meses do período.
+const buildMonthlyChartData = (paid: PaidRow[], from: string, to: string): MonthlyData[] => {
+  const start = parseISO(from);
+  const end = parseISO(to);
+  const months = differenceInCalendarMonths(end, start) < 1
+    ? Array.from({ length: 7 }, (_, i) => subMonths(end, 6 - i))
+    : eachMonthOfInterval({ start, end }).slice(-24);
+  return months.map((d) => {
     const monthKey = format(d, 'yyyy-MM');
-    const label = format(d, 'MMM', { locale: ptBR });
-    const ofMonth = paid.filter((p) => (p.paid_date ?? p.created_at ?? '').slice(0, 7) === monthKey);
+    const label = format(d, months.length > 12 ? 'MMM/yy' : 'MMM', { locale: ptBR });
+    const ofMonth = paid.filter((p) => paidOn(p).slice(0, 7) === monthKey);
     return {
       name: label.charAt(0).toUpperCase() + label.slice(1),
       income: ofMonth.filter((p) => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0),
@@ -66,18 +102,25 @@ export const Dashboard = () => {
   const [editingBudget, setEditingBudget] = useState(false);
   const [savingBudget, setSavingBudget] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [preset, setPreset] = useState<Preset>('this_month');
+  const [customRange, setCustomRange] = useState(() => presetRange('this_month'));
+  const range = preset === 'custom' ? customRange : presetRange(preset);
+  const { from, to } = range;
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!user) return;
 
+      // Gera as pendências dos lançamentos fixos do mês atual (idempotente)
+      await ensureRecurringMonth();
+
       const [recent, pendingRes, paidRes, profileRes] = await Promise.all([
         supabase
           .from('transactions')
-          .select('*')
+          .select('id, type, amount, description, category, status, paid_date, due_date, created_at')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(5),
+          .limit(200),
         supabase
           .from('transactions')
           .select('type, amount, due_date, installment_group')
@@ -121,11 +164,15 @@ export const Dashboard = () => {
   };
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const eomStr = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-  // Painel = só o que vence NESTE mês (ou antes / sem data); parcelas de meses futuros não somam
-  const currentOrOverdue = (p: PendingRow) => !p.due_date || p.due_date <= eomStr;
-  const expectedIncome = pending.filter((p) => p.type === 'income' && currentOrOverdue(p)).reduce((s, p) => s + Number(p.amount), 0);
-  const toPay = pending.filter((p) => p.type === 'expense' && currentOrOverdue(p)).reduce((s, p) => s + Number(p.amount), 0);
+  const includesToday = from <= todayStr && todayStr <= to;
+  // Pendências do período = vencem dentro do intervalo. Se o período inclui hoje, os
+  // atrasados (e itens sem data) também entram — é o que precisa ser resolvido agora.
+  const inPeriod = (p: PendingRow) =>
+    p.due_date
+      ? (p.due_date >= from && p.due_date <= to) || (includesToday && p.due_date < todayStr)
+      : includesToday;
+  const expectedIncome = pending.filter((p) => p.type === 'income' && inPeriod(p)).reduce((s, p) => s + Number(p.amount), 0);
+  const toPay = pending.filter((p) => p.type === 'expense' && inPeriod(p)).reduce((s, p) => s + Number(p.amount), 0);
   const overdueIncome = pending.filter((p) => p.type === 'income' && p.due_date && p.due_date < todayStr);
   const overdueExpense = pending.filter((p) => p.type === 'expense' && p.due_date && p.due_date < todayStr);
   const overdueIncomeTotal = overdueIncome.reduce((s, p) => s + Number(p.amount), 0);
@@ -133,15 +180,29 @@ export const Dashboard = () => {
 
   // Saldo na Conta = valor informado manualmente ("quanto tenho em conta hoje")
   const totalBalance = accountBalance;
-  // Receitas / Despesas = totais reais dos lançamentos pagos
-  const totalIncome = paid.filter((p) => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
-  const totalExpense = paid.filter((p) => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
-  const chartData = buildMonthlyChartData(paid);
+  // Entradas / Saídas = lançamentos pagos DENTRO do período selecionado
+  const paidInPeriod = paid.filter((p) => { const d = paidOn(p); return d >= from && d <= to; });
+  const totalIncome = paidInPeriod.filter((p) => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
+  const totalExpense = paidInPeriod.filter((p) => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
+  const chartData = buildMonthlyChartData(paid, from, to);
+  const isSingleMonth = differenceInCalendarMonths(parseISO(to), parseISO(from)) < 1;
 
-  // Controle de gastos = saídas pagas do mês atual vs teto definido
+  // Transações recentes = as 5 últimas com data dentro do período
+  const recentInPeriod = transactions
+    .filter((t) => { const d = (t.status === 'paid' ? t.paid_date : t.due_date) ?? t.created_at.slice(0, 10); return d >= from && d <= to; })
+    .slice(0, 5);
+
+  const periodLabel = (() => {
+    const f = parseISO(from); const t = parseISO(to);
+    if (preset === 'all') return 'Todo o histórico';
+    if (isSingleMonth && f.getDate() === 1) { const l = format(f, 'MMMM yyyy', { locale: ptBR }); return l.charAt(0).toUpperCase() + l.slice(1); }
+    return `${format(f, 'dd/MM/yyyy')} – ${format(t, 'dd/MM/yyyy')}`;
+  })();
+
+  // Controle de gastos = saídas pagas do mês atual vs teto definido (teto é mensal → sempre mês atual)
   const monthKey = format(new Date(), 'yyyy-MM');
   const spentThisMonth = paid
-    .filter((p) => p.type === 'expense' && (p.paid_date ?? p.created_at ?? '').slice(0, 7) === monthKey)
+    .filter((p) => p.type === 'expense' && paidOn(p).slice(0, 7) === monthKey)
     .reduce((s, p) => s + Number(p.amount), 0);
   const budgetPct = monthlyBudget && monthlyBudget > 0 ? Math.min(100, Math.round((spentThisMonth / monthlyBudget) * 100)) : 0;
   const budgetOver = monthlyBudget != null && spentThisMonth > monthlyBudget;
@@ -154,8 +215,31 @@ export const Dashboard = () => {
   return (
     <div>
       <div className={styles.header}>
-        <h1 className={styles.title}>Painel</h1>
-        <div className={styles.dateRange}>{format(new Date(), 'MMMM yyyy', { locale: ptBR })}</div>
+        <div>
+          <h1 className={styles.title}>Painel</h1>
+          <div className={styles.dateRange}>{periodLabel}</div>
+        </div>
+        <div className={styles.periodFilter}>
+          <select
+            className={styles.periodSelect}
+            value={preset}
+            onChange={(e) => {
+              const p = e.target.value as Preset;
+              if (p === 'custom') setCustomRange(range);
+              setPreset(p);
+            }}
+            aria-label="Período"
+          >
+            {PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+          {preset === 'custom' && (
+            <div className={styles.periodDates}>
+              <input type="date" value={customRange.from} max={customRange.to} onChange={(e) => setCustomRange({ ...customRange, from: e.target.value || customRange.from })} aria-label="De" />
+              <span className="text-muted">até</span>
+              <input type="date" value={customRange.to} min={customRange.from} onChange={(e) => setCustomRange({ ...customRange, to: e.target.value || customRange.to })} aria-label="Até" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className={styles.summaryGrid}>
@@ -173,6 +257,7 @@ export const Dashboard = () => {
               <ArrowUpRight size={16} className={styles.success} /> Entradas
             </div>
             <div className={styles.summaryValue}>{formatCurrency(totalIncome)}</div>
+            <div className="text-xs text-muted">recebido no período</div>
           </CardContent>
         </Card>
         <Card>
@@ -181,6 +266,7 @@ export const Dashboard = () => {
               <ArrowDownRight size={16} className={styles.danger} /> Saídas
             </div>
             <div className={styles.summaryValue}>{formatCurrency(totalExpense)}</div>
+            <div className="text-xs text-muted">pago no período</div>
           </CardContent>
         </Card>
 
@@ -188,6 +274,7 @@ export const Dashboard = () => {
           <CardContent className={styles.summaryCard}>
             <div className={styles.summaryTitle}>
               <Target size={16} /> Controle de Gastos
+              <span className={styles.summaryTag}>mês atual</span>
             </div>
 
             {monthlyBudget == null && !editingBudget && (
@@ -246,8 +333,8 @@ export const Dashboard = () => {
       </div>
 
       <div className={styles.header} style={{ marginBottom: 'var(--spacing-4)' }}>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>Pendências do mês</h2>
-        <Link to="/pending" className="text-sm">Ver tudo →</Link>
+        <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>{isSingleMonth ? 'Pendências do mês' : 'Pendências do período'}</h2>
+        <Link to="/receitas" className="text-sm">Ver tudo →</Link>
       </div>
       <div className={styles.summaryGrid}>
         <Card>
@@ -256,7 +343,7 @@ export const Dashboard = () => {
               <TrendingUp size={16} className={styles.success} /> A Receber
             </div>
             <div className={clsx(styles.summaryValue, styles.success)}>{formatCurrency(expectedIncome)}</div>
-            <div className="text-xs text-muted">entradas a receber neste mês</div>
+            <div className="text-xs text-muted">a receber no período</div>
           </CardContent>
         </Card>
         <Card>
@@ -265,7 +352,7 @@ export const Dashboard = () => {
               <Wallet size={16} className={styles.danger} /> Contas a Pagar
             </div>
             <div className={clsx(styles.summaryValue, styles.danger)}>{formatCurrency(toPay)}</div>
-            <div className="text-xs text-muted">a pagar neste mês</div>
+            <div className="text-xs text-muted">a pagar no período</div>
           </CardContent>
         </Card>
         <Card>
@@ -323,12 +410,15 @@ export const Dashboard = () => {
 
         <Card className={styles.chartCard}>
           <CardHeader>
-            <CardTitle>Entradas vs Saídas</CardTitle>
+            <CardTitle>Entradas vs Saídas {isSingleMonth ? '(mês)' : '(período)'}</CardTitle>
           </CardHeader>
           <CardContent>
             <div style={{ height: 250 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData.slice(-1)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <BarChart
+                  data={isSingleMonth ? chartData.slice(-1) : [{ name: 'Período', income: totalIncome, expense: totalExpense }]}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
                   <XAxis dataKey="name" stroke="var(--color-text-muted)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip cursor={{fill: 'var(--color-surface-hover)'}} contentStyle={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }} />
@@ -344,24 +434,27 @@ export const Dashboard = () => {
       <div className={styles.recentTransactions}>
         <Card>
           <CardHeader>
-            <CardTitle>Transações Recentes</CardTitle>
+            <CardTitle>Lançamentos do período</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="text-muted text-sm">Carregando transações...</div>
-            ) : transactions.length === 0 ? (
-              <div className="text-muted text-sm text-center py-4">Nenhuma transação recente.</div>
+            ) : recentInPeriod.length === 0 ? (
+              <div className="text-muted text-sm text-center py-4">Nenhum lançamento neste período.</div>
             ) : (
               <div className={styles.transactionList}>
-                {transactions.map((tx) => (
+                {recentInPeriod.map((tx) => (
                   <div key={tx.id} className={styles.transactionItem}>
                     <div className={styles.transactionInfo}>
                       <div className={clsx(styles.transactionIcon, tx.type === 'income' ? styles.iconIncome : styles.iconExpense)}>
                         {tx.type === 'income' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
                       </div>
                       <div className={styles.transactionDetails}>
-                        <span className={styles.transactionDesc}>{tx.description}</span>
-                        <span className={styles.transactionDate}>{format(new Date(tx.created_at), 'dd MMM yyyy', { locale: ptBR })}</span>
+                        <span className={styles.transactionDesc}>{tx.category ? `${tx.category} · ` : ''}{tx.description}</span>
+                        <span className={styles.transactionDate}>
+                          {format(new Date(tx.created_at), 'dd MMM yyyy', { locale: ptBR })}
+                          {tx.status === 'pending' && <> · pendente</>}
+                        </span>
                       </div>
                     </div>
                     <div className={clsx(styles.transactionAmount, tx.type === 'income' ? styles.success : styles.danger)}>

@@ -144,6 +144,14 @@
 .tabOverdueExpense.tabActive .tabIcon { color: var(--color-danger); }
 .tabOverdueExpense.tabActive .tabCount { background: var(--color-danger); color: #fff; }
 
+/* Aba "Fixos" (lançamentos que se repetem todo mês) */
+.tabFixed.tabActive {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+}
+.tabFixed.tabActive .tabIcon { color: var(--color-primary); }
+.tabFixed.tabActive .tabCount { background: var(--color-primary); color: #fff; }
+
 @media (max-width: 640px) {
   .tabs {
     gap: var(--spacing-2);
@@ -207,6 +215,14 @@
 .typeExpense { background-color: var(--color-danger-bg); color: var(--color-danger); }
 .statusPending { background-color: var(--color-warning-bg); color: var(--color-warning); }
 .statusOverdue { background-color: var(--color-danger-bg); color: var(--color-danger); }
+.statusPaused { background-color: var(--color-surface-hover); color: var(--color-text-muted); }
+
+.fixedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-primary);
+}
 
 .amountIncome { color: var(--color-success); font-weight: 600; }
 .amountExpense { color: var(--color-danger); font-weight: 600; }

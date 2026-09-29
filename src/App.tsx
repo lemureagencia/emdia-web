@@ -20,7 +20,9 @@ function App() {
           <Route path="/" element={<DashboardLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="transactions" element={<Transactions />} />
-            <Route path="pending" element={<Pending />} />
+            <Route path="receitas" element={<Pending key="income" side="income" />} />
+            <Route path="despesas" element={<Pending key="expense" side="expense" />} />
+            <Route path="pending" element={<Navigate to="/receitas" replace />} />
             <Route path="goals" element={<Goals />} />
             <Route path="agent" element={<Agent />} />
             <Route path="catalog" element={<Catalog />} />

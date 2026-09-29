@@ -3,7 +3,7 @@
 Organizador financeiro (pessoal e empresarial) com **painel web** + **agente de IA no WhatsApp**.
 Visual premium inspirado em Notion/Stripe, com tema claro/escuro e responsivo.
 
-> Última atualização: 29/06/2026 (sessão 5).
+> Última atualização: 16/09/2026 (sessão 7).
 
 ---
 
@@ -62,18 +62,22 @@ mesma tabela `transactions`, diferenciado pela coluna **`status`**:
 
 ### Telas
 - **Login / Cadastro** — com logo da marca.
-- **Painel** (Dashboard):
-  - **Saldo na Conta** → valor **manual** (você digita quanto tem no banco). Isolado.
-  - **Entradas / Saídas** → soma dos lançamentos **pagos** (Transações).
-  - **Pendências do mês**: A Receber, Contas a Pagar, Vencidos — só do **mês atual + atrasados**.
-  - Gráficos (ilustrativos).
+- **Painel** (Dashboard) — com **filtro de período** (Este mês · Mês passado · Últimos 3 meses · Este ano · Tudo · Personalizado):
+  - **Saldo na Conta** → valor **manual** (você digita quanto tem no banco). Isolado do período.
+  - **Entradas / Saídas** → soma dos lançamentos **pagos** dentro do período (`paid_date`).
+  - **Controle de Gastos** → sempre o **mês atual** (o teto é mensal).
+  - **Pendências do período**: A Receber, Contas a Pagar (vencem no período; atrasados entram se o período inclui hoje), Vencidos (total).
+  - Gráficos mês a mês do período e lista dos lançamentos do período.
 - **Transações**: lista **apenas concluídos** (`status='paid'`). Cria movimentação já paga/recebida
   (tipo Entrada/Saída, forma de pagamento, data, valor, Nome do cliente, destinar a meta).
   Colunas: **Nome** · **Descrição** · Data · Tipo · Situação · Forma · Valor. Tem **Editar** ✏️ e Excluir.
   - **Tipo de serviço/produto** (opcional): dropdown com serviços cadastrados + criação inline.
-- **Pendências**: itens em aberto (a receber / a pagar / vencidos), com **filtro** de abas:
-  **Todos · A receber (clientes) · A pagar (contas) · Vencidos**. Marcar como pago ✓, **Editar** ✏️,
-  Excluir. Suporta **parcelamento** (gera N parcelas mês a mês).
+- **Receitas** (`/receitas`) e **Despesas** (`/despesas`): a antiga "Pendências" dividida em duas páginas no menu
+  (mesmo componente `Pending`, prop `side`). Abas: **A receber/A pagar · Vencidos · Fixos**. Marcar como pago ✓,
+  **Editar** ✏️, Excluir. Suporta **parcelamento** (gera N parcelas mês a mês) e **lançamento fixo** (repete todo mês).
+  - **Fixos**: modelo salvo em `recurring_items`; a pendência do mês é gerada automaticamente ao abrir o app
+    (`ensure_recurring_month`). Pode pausar/reativar, editar (vale para os próximos meses) e excluir.
+    Excluir a pendência gerada de um mês marca o mês como "pulado" (não recria).
   - Formulário com ordem: **Nome do cliente → Descrição → Valor + Data de Vencimento**.
   - **Descrição**: dropdown com itens do Catálogo + campo de texto livre. Sem auto-save e sem exclusão aqui — gerenciamento exclusivo na página Catálogo.
 - **Catálogo**: página dedicada (`/catalog`) para gerenciar **descrições padrão** (produtos, serviços, tipos de pendência). CRUD completo: adicionar, editar inline (Enter salva / Esc cancela), excluir. Alimenta o dropdown de Descrição em Pendências e o agente do WhatsApp.
@@ -100,6 +104,7 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - **goals**: `title`, `target_amount`, `current_amount`, `deadline`.
 - **services**: `user_id`, `name` — categorias de serviço/produto criadas pelo usuário (usado no campo `service_type`).
 - **descriptions**: `user_id`, `text` — catálogo de descrições padrão do usuário (gerenciado pela página Catálogo; aparece no dropdown de Pendências e é consultado pelo agente).
+- **recurring_items**: `user_id`, `type`, `amount`, `description`, `category` (Nome), `service_type`, `due_day` (1–31), `payment_method`, `active`, `start_month`, `skipped_months[]` — lançamentos fixos mensais. `transactions.recurring_id` liga cada pendência gerada ao modelo (índice único por fixo+mês).
 - **user_phones**: `user_id`, `phone` — múltiplos números de WhatsApp por usuário. Limite pelo plano: mensal=1, semestral=2, anual=4. Gerenciado pela página Conectar Agente.
 - **pending_plans**: `email`, `plan`, `expires_at` — plano aguardando o usuário criar conta. Preenchido pelo webhook do Kiwify quando o email não existe ainda. Limpo automaticamente ao criar conta (trigger).
 - **agent_messages**: memória curta da conversa do agente (`phone_norm`, `role`, `content`, `created_at`).
@@ -116,6 +121,8 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 - `agent_log_message(phone, role, content)` / `agent_recent_messages(phone, limit)` → memória da conversa.
 - `canon_phone(p)` → normaliza telefone BR (casa número **com ou sem** o 9).
 - `set_plan_by_email(email, plan, expires_at)` → atualiza `profiles.plan` pelo email. Se o usuário não existe ainda, salva em `pending_plans`. Chamada pelo webhook do Kiwify.
+- `ensure_recurring_month(p_month)` → (app, `authenticated`) gera as pendências dos fixos ativos do mês, sem duplicar.
+- `skip_recurring_transaction(p_tx_id)` → (app) exclui a pendência gerada e marca o mês como pulado no fixo.
 - `apply_pending_plan()` → **trigger** em `profiles` (INSERT): ao criar conta, verifica `pending_plans` pelo email e aplica o plano automaticamente, depois limpa o registro.
 
 ### Scripts SQL (na raiz do projeto)
@@ -124,7 +131,8 @@ Quando o agente registra algo **pago**, ele soma/subtrai desse saldo automaticam
 `services_setup.sql` (tabela services + RLS), `descriptions_setup.sql` (tabela descriptions + RLS),
 `catalog_setup.sql` (UPDATE policy em descriptions + RPC `get_descriptions_by_phone`),
 `plans_setup.sql` (planos + tabela `user_phones` + RLS + migração + RPCs atualizados),
-`kiwify_setup.sql` (tabela `pending_plans` + função `set_plan_by_email` + trigger `apply_pending_plan`).
+`kiwify_setup.sql` (tabela `pending_plans` + função `set_plan_by_email` + trigger `apply_pending_plan`),
+`recurring_setup.sql` (tabela `recurring_items` + `transactions.recurring_id` + RPCs `ensure_recurring_month` / `skip_recurring_transaction`).
 
 ---
 
@@ -236,6 +244,20 @@ Cliente manda no WhatsApp
 ---
 
 ## 10. Histórico de mudanças recentes
+
+### Sessão 7 — 16/09/2026
+
+#### Menu: Receitas e Despesas separadas
+- "Pendências" virou duas entradas no menu: **Receitas** (`/receitas`, a receber) e **Despesas** (`/despesas`, a pagar). `/pending` redireciona para `/receitas`.
+- Mesmo componente `Pending` com prop `side`; formulário não pede mais o tipo (herda da página).
+
+#### Painel: filtro por período
+- Seletor no cabeçalho com presets e intervalo personalizado (de/até). Entradas/Saídas, pendências, gráficos e lista respeitam o período. Controle de gastos permanece no mês atual.
+
+#### Lançamentos fixos (recorrentes)
+- Nova opção **"Fixo (todo mês)"** ao criar receita/despesa: salva o modelo em `recurring_items` e gera a pendência do mês automaticamente a cada abertura do app (Painel/Receitas/Despesas chamam `ensure_recurring_month`).
+- Aba **Fixos** em Receitas/Despesas: pausar/reativar, editar modelo, excluir. Linhas geradas exibem a tag "Fixo mensal".
+- **Banco**: rodar `recurring_setup.sql` no Supabase (obrigatório para a funcionalidade aparecer).
 
 ### Sessão 5 — 29/06/2026
 

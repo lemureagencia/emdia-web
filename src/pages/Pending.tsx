@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, CheckCircle, Pencil, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, AlertTriangle } from 'lucide-react';
-import { format, parseISO, endOfMonth } from 'date-fns';
+import { Plus, Trash2, CheckCircle, Pencil, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, AlertTriangle, Repeat, Pause, Play } from 'lucide-react';
+import { format, parseISO, endOfMonth, startOfMonth } from 'date-fns';
 import { clsx } from 'clsx';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import { Input } from '../components/ui/Input';
 import { Card, CardContent } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
 import { PAYMENT_METHODS, paymentMethodLabel, splitInstallments, installmentDueDates, type PaymentMethod } from '../lib/installments';
+import { ensureRecurringMonth, type RecurringItem } from '../lib/recurring';
 import styles from './Pending.module.css';
 
 interface PendingTx {
@@ -23,6 +24,7 @@ interface PendingTx {
   installment_group: string | null;
   installments: number;
   installment_number: number | null;
+  recurring_id: string | null;
 }
 
 interface Description {
@@ -45,18 +47,27 @@ const todayStr = () => format(new Date(), 'yyyy-MM-dd');
 const endOfMonthStr = () => format(endOfMonth(new Date()), 'yyyy-MM-dd');
 const stripParcela = (desc: string) => desc.replace(/\s*\(\d+\/\d+\)\s*$/, '');
 
-export const Pending = () => {
+interface PendingProps {
+  side: 'income' | 'expense';
+}
+
+export const Pending = ({ side }: PendingProps) => {
   const { user } = useAuth();
+  const isIncome = side === 'income';
   const [items, setItems] = useState<PendingTx[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'income' | 'expense' | 'overdue_income' | 'overdue_expense'>('income');
+  // Edição de um lançamento FIXO (modelo), não de uma transação do mês
+  const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  // Abas: 'active' = pendentes do lado atual · 'overdue' = só os vencidos · 'fixed' = lançamentos fixos (mensais)
+  const [filter, setFilter] = useState<'active' | 'overdue' | 'fixed'>('active');
   const [descriptions, setDescriptions] = useState<Description[]>([]);
+  const [recurring, setRecurring] = useState<RecurringItem[]>([]);
   const [formData, setFormData] = useState({
-    type: 'income' as 'income' | 'expense',
+    type: side as 'income' | 'expense',
     amount: '',
     description: '',
     category: '',
@@ -65,6 +76,7 @@ export const Pending = () => {
     payment_method: 'pix' as PaymentMethod,
     parcelado: false,
     installments: '2',
+    recorrente: false,
   });
 
   const fetchPending = async () => {
@@ -72,9 +84,10 @@ export const Pending = () => {
     setIsLoading(true);
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, type, amount, description, category, service_type, due_date, payment_method, installment_group, installments, installment_number')
+      .select('id, type, amount, description, category, service_type, due_date, payment_method, installment_group, installments, installment_number, recurring_id')
       .eq('user_id', user.id)
       .eq('status', 'pending')
+      .eq('type', side)
       .order('due_date', { ascending: true, nullsFirst: false });
 
     if (!error && data) setItems(data);
@@ -91,14 +104,29 @@ export const Pending = () => {
     if (data) setDescriptions(data);
   };
 
+  const fetchRecurring = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('recurring_items')
+      .select('id, type, amount, description, category, service_type, due_day, payment_method, active, start_month')
+      .eq('user_id', user.id)
+      .eq('type', side)
+      .order('due_day', { ascending: true });
+    if (data) setRecurring(data);
+  };
+
   useEffect(() => {
-    fetchPending();
+    // Gera as pendências dos fixos do mês atual antes de listar (idempotente)
+    ensureRecurringMonth().then(() => fetchPending());
     fetchDescriptions();
-  }, [user]);
+    fetchRecurring();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, side]);
 
   const resetForm = () => {
     setEditingId(null);
-    setFormData({ type: 'income', amount: '', description: '', category: '', service_type: '', due_date: todayStr(), payment_method: 'pix', parcelado: false, installments: '2' });
+    setEditingRecurringId(null);
+    setFormData({ type: side, amount: '', description: '', category: '', service_type: '', due_date: todayStr(), payment_method: 'pix', parcelado: false, installments: '2', recorrente: false });
   };
 
   const closeModal = () => {
@@ -123,6 +151,27 @@ export const Pending = () => {
       payment_method: (item.payment_method as PaymentMethod) ?? 'pix',
       parcelado: false,
       installments: '2',
+      recorrente: false,
+    });
+    setIsModalOpen(true);
+  };
+
+  // Editar o MODELO do fixo (vale para os próximos meses; os meses já gerados não mudam)
+  const openEditRecurring = (r: RecurringItem) => {
+    setEditingRecurringId(r.id);
+    const today = new Date();
+    const due = new Date(today.getFullYear(), today.getMonth(), Math.min(r.due_day, endOfMonth(today).getDate()));
+    setFormData({
+      type: r.type,
+      amount: String(r.amount),
+      description: r.description,
+      category: r.category ?? '',
+      service_type: r.service_type ?? '',
+      due_date: format(due, 'yyyy-MM-dd'),
+      payment_method: (r.payment_method as PaymentMethod) ?? 'pix',
+      parcelado: false,
+      installments: '2',
+      recorrente: true,
     });
     setIsModalOpen(true);
   };
@@ -134,6 +183,23 @@ export const Pending = () => {
 
     const total = parseFloat(formData.amount);
     const method = formData.payment_method;
+    const dueDay = parseISO(formData.due_date).getDate();
+
+    // Edição do modelo fixo: só muda o que será gerado daqui pra frente
+    if (editingRecurringId) {
+      const { error } = await supabase.from('recurring_items').update({
+        amount: total,
+        description: formData.description,
+        category: formData.category || null,
+        service_type: formData.service_type || null,
+        due_day: dueDay,
+        payment_method: method,
+      }).eq('id', editingRecurringId);
+      setIsSubmitting(false);
+      if (!error) { closeModal(); fetchRecurring(); }
+      else alert('Erro ao salvar lançamento fixo.');
+      return;
+    }
 
     // Edição: atualiza apenas o item selecionado (não mexe em status/parcelas)
     if (editingId) {
@@ -149,6 +215,33 @@ export const Pending = () => {
       setIsSubmitting(false);
       if (!error) { closeModal(); fetchPending(); }
       else alert('Erro ao salvar alterações.');
+      return;
+    }
+
+    // Novo lançamento FIXO: cria o modelo e já gera a pendência do mês do vencimento
+    if (formData.recorrente) {
+      const { error } = await supabase.from('recurring_items').insert({
+        user_id: user.id,
+        type: formData.type,
+        amount: total,
+        description: formData.description,
+        category: formData.category || null,
+        service_type: formData.service_type || null,
+        due_day: dueDay,
+        payment_method: method,
+        active: true,
+        start_month: format(startOfMonth(parseISO(formData.due_date)), 'yyyy-MM-dd'),
+      });
+      if (error) {
+        setIsSubmitting(false);
+        alert('Erro ao criar lançamento fixo. Verifique se o banco foi atualizado (recurring_setup.sql).');
+        return;
+      }
+      await ensureRecurringMonth(parseISO(formData.due_date));
+      setIsSubmitting(false);
+      closeModal();
+      fetchPending();
+      fetchRecurring();
       return;
     }
 
@@ -211,9 +304,14 @@ export const Pending = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta pendência?')) return;
-    const { error } = await supabase.from('transactions').delete().eq('id', id);
+  const handleDelete = async (id: string, recurringId: string | null = null) => {
+    if (!confirm(recurringId
+      ? 'Excluir a pendência deste mês? O lançamento fixo continua e volta a gerar no próximo mês.'
+      : 'Tem certeza que deseja excluir esta pendência?')) return;
+    // Fixo: marca o mês como pulado no modelo, senão a pendência seria recriada ao recarregar
+    const { error } = recurringId
+      ? await supabase.rpc('skip_recurring_transaction', { p_tx_id: id })
+      : await supabase.from('transactions').delete().eq('id', id);
     if (!error) {
       setItems(items.filter((i) => i.id !== id));
     } else {
@@ -229,6 +327,19 @@ export const Pending = () => {
     } else {
       alert('Erro ao excluir parcelamento.');
     }
+  };
+
+  const handleToggleRecurring = async (r: RecurringItem) => {
+    const { error } = await supabase.from('recurring_items').update({ active: !r.active }).eq('id', r.id);
+    if (!error) setRecurring(recurring.map((x) => (x.id === r.id ? { ...x, active: !r.active } : x)));
+    else alert('Erro ao atualizar lançamento fixo.');
+  };
+
+  const handleDeleteRecurring = async (r: RecurringItem) => {
+    if (!confirm(`Excluir o lançamento fixo "${r.description}"? Os meses já gerados continuam na lista.`)) return;
+    const { error } = await supabase.from('recurring_items').delete().eq('id', r.id);
+    if (!error) setRecurring(recurring.filter((x) => x.id !== r.id));
+    else alert('Erro ao excluir lançamento fixo.');
   };
 
   const formatCurrency = (value: number) =>
@@ -263,34 +374,25 @@ export const Pending = () => {
   // Cartões: parcelamentos contam só a PARCELA ATIVA (próxima não paga) — sempre 1 parcela.
   // Itens avulsos contam se vencem neste mês ou estão atrasados.
   const cardRows = displayRows.filter((r) => r.isGroup || isCurrentOrOverdue(r.next));
-  const expectedIncome = cardRows.filter((r) => r.next.type === 'income').reduce((s, r) => s + Number(r.next.amount), 0);
-  const toPay = cardRows.filter((r) => r.next.type === 'expense').reduce((s, r) => s + Number(r.next.amount), 0);
+  const activeTotal = cardRows.reduce((s, r) => s + Number(r.next.amount), 0);
   const overdueItems = displayRows.filter((r) => isOverdue(r.next));
   const overdueTotal = overdueItems.reduce((s, r) => s + Number(r.next.amount), 0);
-  const overdueIncomeItems = overdueItems.filter((r) => r.next.type === 'income');
-  const overdueExpenseItems = overdueItems.filter((r) => r.next.type === 'expense');
 
-  // Filtro da aba: separa clientes (a receber) de contas (a pagar) e vencidos por lado
-  const visibleRows = displayRows.filter((r) =>
-    filter === 'income' ? r.next.type === 'income'
-    : filter === 'expense' ? r.next.type === 'expense'
-    : filter === 'overdue_income' ? isOverdue(r.next) && r.next.type === 'income'
-    : isOverdue(r.next) && r.next.type === 'expense'
-  );
-
-  // Contadores por aba (badge)
-  const incomeCount = displayRows.filter((r) => r.next.type === 'income').length;
-  const expenseCount = displayRows.filter((r) => r.next.type === 'expense').length;
+  // Filtro da aba: 'active' = todos (deste lado) · 'overdue' = só os vencidos
+  const visibleRows = filter === 'overdue' ? overdueItems : displayRows;
+  const activeCount = displayRows.length;
 
   return (
     <div>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>Pendências</h1>
-          <p className="text-muted">Contas a pagar e a receber, com datas e vencidos</p>
+          <h1 className={styles.title}>{isIncome ? 'Receitas' : 'Despesas'}</h1>
+          <p className="text-muted">
+            {isIncome ? 'Recebimentos a receber, com datas e vencidos' : 'Contas a pagar, com datas e vencidos'}
+          </p>
         </div>
         <Button onClick={openCreate}>
-          <Plus size={18} /> Nova Pendência
+          <Plus size={18} /> {isIncome ? 'Nova receita' : 'Nova despesa'}
         </Button>
       </div>
 
@@ -298,38 +400,31 @@ export const Pending = () => {
         <Card>
           <CardContent className={styles.summaryCard}>
             <div className={styles.summaryTitle}>
-              <TrendingUp size={16} className={styles.success} /> A Receber
+              {isIncome ? <TrendingUp size={16} className={styles.success} /> : <Wallet size={16} className={styles.danger} />}
+              {isIncome ? 'A Receber' : 'A Pagar'}
             </div>
-            <div className={clsx(styles.summaryValue, styles.success)}>{formatCurrency(expectedIncome)}</div>
-            <div className={styles.summaryHint}>Entradas a receber de pagamentos pendentes</div>
+            <div className={clsx(styles.summaryValue, isIncome ? styles.success : styles.danger)}>{formatCurrency(activeTotal)}</div>
+            <div className={styles.summaryHint}>{isIncome ? 'Recebimentos pendentes' : 'Saídas pendentes'}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className={styles.summaryCard}>
             <div className={styles.summaryTitle}>
-              <Wallet size={16} className={styles.danger} /> Contas a Pagar
+              <AlertTriangle size={16} className={isIncome ? styles.warning : styles.danger} /> Vencidos
             </div>
-            <div className={clsx(styles.summaryValue, styles.danger)}>{formatCurrency(toPay)}</div>
-            <div className={styles.summaryHint}>Saídas pendentes</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className={styles.summaryCard}>
-            <div className={styles.summaryTitle}>
-              <AlertTriangle size={16} className={styles.warning} /> Vencidos
-            </div>
-            <div className={clsx(styles.summaryValue, styles.warning)}>{formatCurrency(overdueTotal)}</div>
-            <div className={styles.summaryHint}>{overdueItems.length} pendência(s) em atraso</div>
+            <div className={clsx(styles.summaryValue, isIncome ? styles.warning : styles.danger)}>{formatCurrency(overdueTotal)}</div>
+            <div className={styles.summaryHint}>{overdueItems.length} em atraso</div>
           </CardContent>
         </Card>
       </div>
 
       <div className={styles.tabs} role="tablist">
         {([
-          ['income', 'A receber', 'clientes', TrendingUp, incomeCount, styles.tabIncome],
-          ['expense', 'A pagar', 'contas', Wallet, expenseCount, styles.tabExpense],
-          ['overdue_income', 'Vencidos a receber', 'clientes', AlertTriangle, overdueIncomeItems.length, styles.tabOverdue],
-          ['overdue_expense', 'Vencidos a pagar', 'contas', AlertTriangle, overdueExpenseItems.length, styles.tabOverdueExpense],
+          ['active', isIncome ? 'A receber' : 'A pagar', isIncome ? 'clientes' : 'contas',
+            isIncome ? TrendingUp : Wallet, activeCount, isIncome ? styles.tabIncome : styles.tabExpense],
+          ['overdue', 'Vencidos', 'em atraso', AlertTriangle, overdueItems.length,
+            isIncome ? styles.tabOverdue : styles.tabOverdueExpense],
+          ['fixed', 'Fixos', 'todo mês', Repeat, recurring.filter((r) => r.active).length, styles.tabFixed],
         ] as const).map(([key, label, sub, Icon, count, colorClass]) => (
           <button
             key={key}
@@ -348,6 +443,64 @@ export const Pending = () => {
         ))}
       </div>
 
+      {filter === 'fixed' ? (
+      <Card>
+        <div className={styles.tableContainer}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Descrição</th>
+                <th>Vence dia</th>
+                <th>Situação</th>
+                <th>Forma</th>
+                <th style={{ textAlign: 'right' }}>Valor/mês</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {recurring.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                    Nenhum lançamento fixo. Escolha "Fixo (todo mês)" ao criar {isIncome ? 'uma receita' : 'uma despesa'}.
+                  </td>
+                </tr>
+              ) : (
+                recurring.map((r) => (
+                  <tr key={r.id} style={{ opacity: r.active ? 1 : 0.55 }}>
+                    <td style={{ fontWeight: 500 }}>{r.category || '-'}</td>
+                    <td>{r.description}</td>
+                    <td>Dia {r.due_day}</td>
+                    <td>
+                      <span className={clsx(styles.badge, r.active ? styles.statusPending : styles.statusPaused)}>
+                        {r.active ? 'Ativo' : 'Pausado'}
+                      </span>
+                    </td>
+                    <td>{paymentMethodLabel(r.payment_method)}</td>
+                    <td style={{ textAlign: 'right' }} className={r.type === 'income' ? styles.amountIncome : styles.amountExpense}>
+                      {formatCurrency(r.amount)}
+                    </td>
+                    <td>
+                      <div className={styles.rowActions}>
+                        <Button variant="ghost" size="icon" onClick={() => handleToggleRecurring(r)} aria-label={r.active ? 'Pausar' : 'Reativar'} title={r.active ? 'Pausar (não gera nos próximos meses)' : 'Reativar'}>
+                          {r.active ? <Pause size={16} /> : <Play size={16} className="text-success" />}
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openEditRecurring(r)} aria-label="Editar" title="Editar lançamento fixo">
+                          <Pencil size={16} />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRecurring(r)} aria-label="Excluir" title="Excluir lançamento fixo">
+                          <Trash2 size={16} className="text-danger" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      ) : (
       <Card>
         <div className={styles.tableContainer}>
           <table className={styles.table}>
@@ -387,6 +540,11 @@ export const Pending = () => {
                             {row.lastDue && <> • última {format(parseISO(row.lastDue), 'dd/MM/yyyy')}</>}
                           </div>
                         )}
+                        {item.recurring_id && (
+                          <div className={clsx(styles.summaryHint, styles.fixedTag)} title="Gerado automaticamente todo mês">
+                            <Repeat size={12} /> Fixo mensal
+                          </div>
+                        )}
                       </td>
                       <td>{item.due_date ? format(parseISO(item.due_date), 'dd/MM/yyyy') : '-'}</td>
                       <td>
@@ -413,7 +571,7 @@ export const Pending = () => {
                           <Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label="Editar" title={row.isGroup ? 'Editar esta parcela' : 'Editar'}>
                             <Pencil size={16} />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => row.isGroup ? handleDeleteGroup(row.key) : handleDelete(item.id)} aria-label="Excluir" title={row.isGroup ? 'Excluir parcelamento' : 'Excluir'}>
+                          <Button variant="ghost" size="icon" onClick={() => row.isGroup ? handleDeleteGroup(row.key) : handleDelete(item.id, item.recurring_id)} aria-label="Excluir" title={row.isGroup ? 'Excluir parcelamento' : 'Excluir'}>
                             <Trash2 size={16} className="text-danger" />
                           </Button>
                         </div>
@@ -426,20 +584,18 @@ export const Pending = () => {
           </table>
         </div>
       </Card>
+      )}
 
-      <Modal isOpen={isModalOpen} onClose={closeModal} title={editingId ? 'Editar Pendência' : 'Nova Pendência'}>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={
+          editingRecurringId ? (isIncome ? 'Editar Receita Fixa' : 'Editar Despesa Fixa')
+          : editingId ? (isIncome ? 'Editar Receita' : 'Editar Despesa')
+          : (isIncome ? 'Nova Receita' : 'Nova Despesa')
+        }
+      >
         <form onSubmit={handleAdd} className="flex flex-col gap-4">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="type" checked={formData.type === 'income'} onChange={() => setFormData({ ...formData, type: 'income' })} />
-              A receber (entrada)
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="type" checked={formData.type === 'expense'} onChange={() => setFormData({ ...formData, type: 'expense' })} />
-              A pagar (saída)
-            </label>
-          </div>
-
           <div>
             <label className="form-label">Forma de pagamento</label>
             <div className="flex gap-4 mt-1">
@@ -457,19 +613,28 @@ export const Pending = () => {
             </div>
           </div>
 
-          {!editingId && (
+          {!editingId && !editingRecurringId && (
             <div>
               <label className="form-label">Pagamento</label>
-              <div className="flex gap-4 mt-1">
+              <div className="flex gap-4 mt-1" style={{ flexWrap: 'wrap' }}>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="parcelado" checked={!formData.parcelado} onChange={() => setFormData({ ...formData, parcelado: false })} />
+                  <input type="radio" name="parcelado" checked={!formData.parcelado && !formData.recorrente} onChange={() => setFormData({ ...formData, parcelado: false, recorrente: false })} />
                   À vista
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="parcelado" checked={formData.parcelado} onChange={() => setFormData({ ...formData, parcelado: true })} />
+                  <input type="radio" name="parcelado" checked={formData.parcelado} onChange={() => setFormData({ ...formData, parcelado: true, recorrente: false })} />
                   Parcelado
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="parcelado" checked={formData.recorrente} onChange={() => setFormData({ ...formData, parcelado: false, recorrente: true })} />
+                  <Repeat size={14} /> Fixo (todo mês)
+                </label>
               </div>
+              {formData.recorrente && (
+                <div className="text-xs text-muted mt-1">
+                  Salva {isIncome ? 'o cliente' : 'a conta'} uma vez e gera automaticamente a pendência todo mês, no dia do vencimento escolhido.
+                </div>
+              )}
             </div>
           )}
 
@@ -553,7 +718,7 @@ export const Pending = () => {
             </div>
             <div className="w-full">
               <Input
-                label={formData.parcelado ? 'Vencimento da 1ª parcela' : 'Data de Vencimento'}
+                label={formData.parcelado ? 'Vencimento da 1ª parcela' : formData.recorrente ? 'Vencimento (o dia se repete todo mês)' : 'Data de Vencimento'}
                 type="date"
                 required
                 value={formData.due_date}
