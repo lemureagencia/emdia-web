@@ -46,6 +46,9 @@ create unique index if not exists transactions_recurring_month_uidx
 
 -- Gera (se ainda não existir) a transação pendente de cada fixo ativo para o mês informado.
 -- p_month: qualquer dia do mês desejado (default = mês atual). Usa auth.uid() → seguro via RLS.
+-- Concorrência: o app chama esta função ao abrir Painel/Receitas/Despesas e o React StrictMode
+-- dispara o efeito duas vezes, então duas chamadas podem rodar ao mesmo tempo. O advisory lock
+-- serializa por usuário e o "on conflict do nothing" evita erro de chave duplicada.
 create or replace function public.ensure_recurring_month(p_month date default current_date)
 returns integer
 language plpgsql
@@ -57,6 +60,14 @@ declare
   v_last  date := (date_trunc('month', p_month) + interval '1 month - 1 day')::date;
   v_count integer;
 begin
+  -- Sem usuário logado não há o que gerar (evita lock e trabalho à toa)
+  if auth.uid() is null then
+    return 0;
+  end if;
+
+  -- Serializa as chamadas concorrentes do mesmo usuário (liberado no fim da transação)
+  perform pg_advisory_xact_lock(hashtext('ensure_recurring_month'), hashtext(auth.uid()::text));
+
   insert into public.transactions
     (user_id, type, status, amount, description, category, service_type, due_date, payment_method, installments, recurring_id)
   select r.user_id, r.type, 'pending', r.amount, r.description, r.category, r.service_type,
@@ -72,7 +83,8 @@ begin
       select 1 from public.transactions t
       where t.recurring_id = r.id
         and t.due_date between v_first and v_last
-    );
+    )
+  on conflict do nothing;
   get diagnostics v_count = row_count;
   return v_count;
 end;
